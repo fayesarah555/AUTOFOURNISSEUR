@@ -1,0 +1,205 @@
+      <section className="results-card panel">
+        <header className="results-header">
+          <div>
+            <h2>Résultats</h2>
+            {meta ? (
+              <p>
+                {meta.total} transporteurs correspondants • page {meta.page}/{meta.totalPages}
+              </p>
+            ) : (
+              <p>Affichez les transporteurs correspondant à vos critères.</p>
+            )}
+          </div>
+          <div className="results-controls">
+            <label>
+              Tri
+              <select
+                value={sorting.sortBy}
+                onChange={(event) => setSorting((prev) => ({ ...prev, sortBy: event.target.value }))}
+              >
+                {SORT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              Ordre
+              <select
+                value={sorting.sortOrder}
+                onChange={(event) =>
+                  setSorting((prev) => ({ ...prev, sortOrder: event.target.value }))
+                }
+              >
+                <option value="desc">Décroissant</option>
+                <option value="asc">Croissant</option>
+              </select>
+            </label>
+          </div>
+        </header>
+
+        {error && <div className="results-error">{error}</div>}
+
+        <div className="results-table">
+          <div className="results-head">
+            <span>Transporteur</span>
+            <span>Score</span>
+            <span>Satisfaction</span>
+            <span>Ponctualité</span>
+            <span>Prix / km</span>
+            <span>Coût estimé</span>
+            <span>Délai</span>
+            <span>CO₂</span>
+            <span />
+          </div>
+
+          {loading ? (
+            <div className="results-loading">Chargement des options...</div>
+          ) : providers.length === 0 ? (
+            <div className="results-empty">
+              Aucun transporteur ne correspond aux critères sélectionnés.
+            </div>
+          ) : (
+            providers.map((provider) => {
+              const isSelected = Boolean(selected[provider.id]);
+              const isEditing = editingProviderId === provider.id;
+              const featureList =
+                provider.profile?.features?.length > 0
+                  ? provider.profile.features
+                  : provider.serviceCapabilities || [];
+              return (
+                <div
+                  key={provider.id}
+                  className={`results-row ${isSelected ? 'row-selected' : ''} ${
+                    isEditing ? 'row-editing' : ''
+                  }`}
+                >
+                  <div className="results-main">
+                    <strong>{provider.name}</strong>
+                    <p>{provider.description}</p>
+                    <div className="results-contact">
+                      {provider.profile?.address && <span>{provider.profile.address}</span>}
+                      {(provider.profile?.postalCode || provider.profile?.city) && (
+                        <span>
+                          {[provider.profile?.postalCode, provider.profile?.city]
+                            .filter(Boolean)
+                            .join(' ')}
+                        </span>
+                      )}
+                      {provider.profile?.contact && (
+                        <span>Contact : {provider.profile.contact}</span>
+                      )}
+                      {provider.profile?.phone && (
+                        <span>Tél. : {provider.profile.phone}</span>
+                      )}
+                      {provider.profile?.unreachable && <span className="status-warning">Ne répond pas</span>}
+                    </div>
+                    <div className="results-tags">
+                      {provider.modes.map((mode) => (
+                        <span key={`${provider.id}-${mode}`} className="tag">
+                          {getModeLabel(mode)}
+                        </span>
+                      ))}
+                      <span className="tag tag-light">{getCoverageLabel(provider.coverage)}</span>
+                    </div>
+                    <div className="results-departments">
+                      <span>
+                        Livraison :{' '}
+                        {formatDepartmentList(provider.profile?.deliveryDepartments || [])}
+                      </span>
+                      <span>
+                        Chargement :{' '}
+                        {formatDepartmentList(provider.profile?.pickupDepartments || [])}
+                      </span>
+                    </div>
+                    <div className="results-capabilities">
+                      {featureList.slice(0, 6).map((capability) => (
+                        <span key={`${provider.id}-${capability}`} className="capability">
+                          {getFeatureLabel(capability)}
+                        </span>
+                      ))}
+                      {featureList.length === 0 && <span className="capability">—</span>}
+                      {featureList.length > 6 && (
+                        <span className="capability">+{featureList.length - 6}</span>
+                      )}
+                    </div>
+                  </div>
+                  <span className="results-value" data-label="Score">
+                    {provider.score?.toFixed(0)}
+                  </span>
+                  <span className="results-value" data-label="Satisfaction">
+                    {provider.customerSatisfaction?.toFixed(1)}/5
+                  </span>
+                  <span className="results-value" data-label="Ponctualité">
+                    {formatPercent(provider.onTimeRate)}
+                  </span>
+                  <span className="results-value" data-label="Prix / km">
+                    {provider.pricePerKm?.toFixed(2)} €/km
+                  </span>
+                  <span className="results-value" data-label="Coût estimé">
+                    {formatDistanceCost(provider.estimatedCost)}
+                  </span>
+                  <span className="results-value" data-label="Délai">
+                    {provider.leadTimeDays} j
+                  </span>
+                  <span className="results-value" data-label="CO₂">
+                    {provider.co2GramsPerTonneKm} g
+                  </span>
+                  <div className="results-actions">
+                    <button type="button" onClick={() => handleSelectProvider(provider)}>
+                      {isSelected ? 'Retirer' : 'Comparer'}
+                    </button>
+                    {isAdmin && (
+                      <div className="results-admin-buttons">
+                        <button type="button" onClick={() => handleStartEditProvider(provider)}>
+                          Modifier
+                        </button>
+                        <button
+                          type="button"
+                          className="danger"
+                          onClick={() => handleDeleteProvider(provider)}
+                        >
+                          Supprimer
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        <footer className="results-footer">
+          <div className="results-pagination">
+            <button
+              type="button"
+              disabled={!meta?.hasPreviousPage}
+              onClick={() => goToPage(-1)}
+            >
+              Précédent
+            </button>
+            <button type="button" disabled={!meta?.hasNextPage} onClick={() => goToPage(1)}>
+              Suivant
+            </button>
+          </div>
+          <label>
+            Résultats / page
+            <select
+              value={pagination.pageSize}
+              onChange={(event) =>
+                setPagination({ page: 1, pageSize: Number(event.target.value) })
+              }
+            >
+              {[5, 7, 10, 15].map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+          </label>
+        </footer>
+      </section>
+

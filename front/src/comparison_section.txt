@@ -1,0 +1,112 @@
+      <section className="comparison-card">
+        <header>
+          <h2>Comparaison</h2>
+          <p>
+            Sélectionnez jusqu’à trois transporteurs pour comparer les SLA, les coûts estimés et
+            l’impact environnemental.
+          </p>
+        </header>
+
+        {comparisonList.length === 0 ? (
+          <div className="comparison-empty">
+            Choisissez des transporteurs dans la liste pour voir la comparaison détaillée.
+          </div>
+        ) : (
+          <div className="comparison-grid">
+            {comparisonList.map((provider) => (
+              <article key={provider.id} className="comparison-column">
+                <div className="comparison-header">
+                  <h3>{provider.name}</h3>
+                  <button type="button" onClick={() => handleSelectProvider(provider)}>
+                    Retirer
+                  </button>
+                </div>
+                {provider.profile?.address && (
+                  <p className="comparison-address">{provider.profile.address}</p>
+                )}
+                <ul>
+                  <li>
+                    <strong>Score</strong>
+                    <span>{provider.score?.toFixed(0)}</span>
+                  </li>
+                  <li>
+                    <strong>Satisfaction</strong>
+                    <span>{provider.customerSatisfaction?.toFixed(1)}/5</span>
+                  </li>
+                  <li>
+                    <strong>Ponctualité</strong>
+                    <span>{formatPercent(provider.onTimeRate)}</span>
+                  </li>
+                  <li>
+                    <strong>Délai</strong>
+                    <span>{provider.leadTimeDays} jours</span>
+                  </li>
+                  <li>
+                    <strong>Ville</strong>
+                    <span>
+                      {[provider.profile?.postalCode, provider.profile?.city]
+                        .filter(Boolean)
+                        .join(' ') || '—'}
+                    </span>
+                  </li>
+                  <li>
+                    <strong>Contact</strong>
+                    <span>{provider.profile?.contact || '—'}</span>
+                  </li>
+                  <li>
+                    <strong>Téléphone</strong>
+                    <span>{provider.profile?.phone || '—'}</span>
+                  </li>
+                  <li>
+                    <strong>Min. expédition</strong>
+                    <span>{provider.minShipmentKg} kg</span>
+                  </li>
+                  <li>
+                    <strong>Coût estimé</strong>
+                    <span>{formatDistanceCost(provider.estimatedCost)}</span>
+                  </li>
+                  <li>
+                    <strong>Frais fixes</strong>
+                    <span>{formatCurrency(provider.baseHandlingFee)}</span>
+                  </li>
+                  <li>
+                    <strong>Prix / km</strong>
+                    <span>{provider.pricePerKm?.toFixed(2)} €/km</span>
+                  </li>
+                  <li>
+                    <strong>CO₂</strong>
+                    <span>{provider.co2GramsPerTonneKm} g/t.km</span>
+                  </li>
+                  <li>
+                    <strong>Certifications</strong>
+                    <span>{provider.certifications.join(', ') || '—'}</span>
+                  </li>
+                  <li>
+                    <strong>Services</strong>
+                    <span>
+                      {(provider.profile?.features?.length
+                        ? provider.profile.features
+                        : provider.serviceCapabilities
+                      )
+                        .map(getFeatureLabel)
+                        .join(', ') || '—'}
+                    </span>
+                  </li>
+                  <li>
+                    <strong>Livraison</strong>
+                    <span>{formatDepartmentList(provider.profile?.deliveryDepartments || [])}</span>
+                  </li>
+                  <li>
+                    <strong>Chargement</strong>
+                    <span>{formatDepartmentList(provider.profile?.pickupDepartments || [])}</span>
+                  </li>
+                  <li>
+                    <strong>Notes</strong>
+                    <span>{provider.notes}</span>
+                  </li>
+                </ul>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>

@@ -1,0 +1,75 @@
+      {isAdmin && (
+        <section className="admin-card" ref={adminFormRef}>
+          <header className="admin-header">
+            <div>
+              <h2>{editingProviderId ? 'Modifier un transporteur' : 'Nouveau transporteur'}</h2>
+              <p>
+                {editingProviderId
+                  ? 'Mettez à jour les informations du transporteur sélectionné ci-dessus.'
+                  : 'Ajoutez un fournisseur ou transporteur supplémentaire à partir de vos données.'}
+              </p>
+            </div>
+            {editingProviderId && (
+              <button
+                type="button"
+                className="admin-reset"
+                onClick={handleAdminReset}
+                disabled={adminStatus.submitting}
+              >
+                Nouvelle fiche
+              </button>
+            )}
+          </header>
+          {adminStatus.error && (
+            <div className="admin-alert admin-alert-error">{adminStatus.error}</div>
+          )}
+          {adminStatus.success && (
+            <div className="admin-alert admin-alert-success">{adminStatus.success}</div>
+          )}
+          <form className="admin-form" onSubmit={handleAdminSubmit}>
+            <div className="admin-form-grid">
+              <label className="admin-field">
+                <span>Nom *</span>
+                <input
+                  type="text"
+                  value={adminForm.name}
+                  onChange={(event) => handleAdminInputChange('name', event.target.value)}
+                  placeholder="Ex : Euro Fastline"
+                  disabled={adminStatus.submitting}
+                />
+              </label>
+
+              <label className="admin-field admin-field-full">
+                <span>Description *</span>
+                <textarea
+                  rows={3}
+                  value={adminForm.description}
+                  onChange={(event) => handleAdminInputChange('description', event.target.value)}
+                  placeholder="Spécificités, promesse de service, différenciants..."
+                  disabled={adminStatus.submitting}
+                />
+              </label>
+
+              <label className="admin-field">
+                <span>Modes *</span>
+                <input
+                  type="text"
+                  value={adminForm.modes}
+                  onChange={(event) => handleAdminInputChange('modes', event.target.value)}
+                  placeholder="road, air..."
+                  disabled={adminStatus.submitting}
+                />
+              </label>
+
+              <label className="admin-field">
+                <span>Couverture *</span>
+                <select
+                  value={adminForm.coverage}
+                  onChange={(event) => handleAdminInputChange('coverage', event.target.value)}
+                  disabled={adminStatus.submitting}
+                >
+                  {COVERAGE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))
