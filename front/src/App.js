@@ -32,7 +32,7 @@ const App = () => {
   const handleLoginSuccess = (userInfo) => {
     setUser(userInfo);
     setStatus('authenticated');
-    navigate('/', { replace: true });
+    navigate('/admin', { replace: true });
   };
 
   const handleLogout = async () => {
@@ -51,6 +51,14 @@ const App = () => {
     navigate('/login', { state: { from: location.pathname } });
   };
 
+  const isAdmin = status === 'authenticated' && Array.isArray(user?.roles) && user.roles.includes('admin');
+
+  useEffect(() => {
+    if (status === 'authenticated' && isAdmin && !location.pathname.startsWith('/admin')) {
+      navigate('/admin', { replace: true });
+    }
+  }, [status, isAdmin, location.pathname, navigate]);
+
   if (status === 'loading') {
     return (
       <div className="layout">
@@ -61,15 +69,13 @@ const App = () => {
     );
   }
 
-  const isAdmin = status === 'authenticated' && Array.isArray(user?.roles) && user.roles.includes('admin');
-
   return (
     <Routes>
       <Route
         path="/login"
         element={
           status === 'authenticated' ? (
-            <Navigate to="/" replace />
+            <Navigate to="/admin" replace />
           ) : (
             <Login onAuthenticated={handleLoginSuccess} />
           )

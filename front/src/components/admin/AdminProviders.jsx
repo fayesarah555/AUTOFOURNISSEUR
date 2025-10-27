@@ -1,52 +1,53 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import apiClient from '../../utils/apiClient';
-import './adminProviders.css';
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import apiClient from "../../utils/apiClient";
+import "./adminProviders.css";
 
-const defaultFormState = {
-  id: '',
-  name: '',
-  description: '',
-  notes: '',
-  coverage: 'domestic',
-  contractFlexibility: 'spot',
-  leadTimeDays: '',
-  onTimeRate: '',
-  pricePerKm: '',
-  baseHandlingFee: '',
-  minShipmentKg: '',
-  co2GramsPerTonneKm: '',
-  customerSatisfaction: '',
-  modes: 'road',
-  regions: '',
-  serviceCapabilities: '',
-  certifications: '',
+const FEATURE_OPTIONS = [
+  { value: "semi-tautliner", label: "Semi tautliner" },
+  { value: "semi-fourgon", label: "Semi fourgon" },
+  { value: "semi-frigorifique", label: "Semi frigorifique" },
+  { value: "semi-hayon", label: "Semi hayon" },
+  { value: "porteur-tole", label: "Porteur tôlé" },
+  { value: "porteur-taut", label: "Porteur tautliner" },
+  { value: "porteur-hayon", label: "Porteur hayon" },
+  { value: "vehicule-leger", label: "Véhicule léger" },
+  { value: "express", label: "Express" },
+  { value: "adr", label: "ADR" },
+  { value: "international", label: "International" },
+  { value: "grue", label: "Grue" },
+  { value: "chariot-embarque", label: "Chariot embarqué" },
+  { value: "fosse", label: "Fosse" },
+  { value: "porte-char", label: "Porte-char" },
+  { value: "convoi-exceptionnel", label: "Convoi exceptionnel" },
+];
+
+const DEFAULT_DEPARTMENTS = [
+  "01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12", "13", "14", "15",
+  "16", "17", "18", "19", "2A", "2B", "21", "22", "23", "24", "25", "26", "27", "28", "29",
+  "30", "31", "32", "33", "34", "35", "36", "37", "38", "39", "40", "41", "42", "43", "44",
+  "45", "46", "47", "48", "49", "50", "51", "52", "53", "54", "55", "56", "57", "58", "59",
+  "60", "61", "62", "63", "64", "65", "66", "67", "68", "69", "70", "71", "72", "73", "74",
+  "75", "76", "77", "78", "79", "80", "81", "82", "83", "84", "85", "86", "87", "88", "89",
+  "90", "91", "92", "93", "94", "95"
+];
+
+const createDefaultFormState = () => ({
+  id: "",
+  name: "",
+  description: "",
   profile: {
-    address: '',
-    postalCode: '',
-    city: '',
-    department: '',
-    contact: '',
-    phone: '',
-    email: '',
+    address: "",
+    postalCode: "",
+    city: "",
+    department: "",
+    contact: "",
+    phone: "",
     unreachable: false,
-    features: '',
-    deliveryDepartments: '',
-    pickupDepartments: '',
   },
-};
-
-const toList = (value) => {
-  if (!value) {
-    return [];
-  }
-  if (Array.isArray(value)) {
-    return value;
-  }
-  return value
-    .split(/[,;\n]/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
+  features: [],
+  deliveryDepartments: [],
+  pickupDepartments: [],
+});
 
 const AdminProviders = () => {
   const [providers, setProviders] = useState([]);
@@ -55,12 +56,21 @@ const AdminProviders = () => {
   const [error, setError] = useState(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
-  const [formState, setFormState] = useState(defaultFormState);
+  const [formState, setFormState] = useState(() => createDefaultFormState());
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [importStatus, setImportStatus] = useState(null);
   const [importLoading, setImportLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
+
+  const departmentOptions = useMemo(() => {
+    const deliveryCodes = meta?.availableFilters?.deliveryDepartments || [];
+    const pickupCodes = meta?.availableFilters?.pickupDepartments || [];
+    const codes = deliveryCodes.length || pickupCodes.length
+      ? Array.from(new Set([...deliveryCodes, ...pickupCodes]))
+      : DEFAULT_DEPARTMENTS;
+    return codes.map((code) => ({ value: code, label: code }));
+  }, [meta]);
 
   const fetchProviders = async () => {
     setLoading(true);
@@ -88,44 +98,32 @@ const AdminProviders = () => {
   }, [page, pageSize]);
 
   const openCreateModal = () => {
-    setFormState(defaultFormState);
+    setFormState(createDefaultFormState());
     setIsEditing(false);
     setIsModalOpen(true);
   };
 
   const openEditModal = (provider) => {
     const profile = provider.profile || {};
+    const combinedFeatures = Array.from(
+      new Set([...(profile.features || []), ...(provider.serviceCapabilities || [])])
+    );
     setFormState({
       id: provider.id,
       name: provider.name || '',
       description: provider.description || '',
-      notes: provider.notes || '',
-      coverage: provider.coverage || 'domestic',
-      contractFlexibility: provider.contractFlexibility || 'spot',
-      leadTimeDays: provider.leadTimeDays ?? '',
-      onTimeRate: provider.onTimeRate ?? '',
-      pricePerKm: provider.pricePerKm ?? '',
-      baseHandlingFee: provider.baseHandlingFee ?? '',
-      minShipmentKg: provider.minShipmentKg ?? '',
-      co2GramsPerTonneKm: provider.co2GramsPerTonneKm ?? '',
-      customerSatisfaction: provider.customerSatisfaction ?? '',
-      modes: (provider.modes || []).join(', '),
-      regions: (provider.regions || []).join(', '),
-      serviceCapabilities: (provider.serviceCapabilities || []).join(', '),
-      certifications: (provider.certifications || []).join(', '),
       profile: {
         address: profile.address || '',
         postalCode: profile.postalCode || '',
         city: profile.city || '',
-        department: profile.department || '',
+        department: (profile.department || '').toUpperCase(),
         contact: profile.contact || '',
         phone: profile.phone || '',
-        email: profile.email || '',
         unreachable: Boolean(profile.unreachable),
-        features: (profile.features || []).join(', '),
-        deliveryDepartments: (profile.deliveryDepartments || []).join(', '),
-        pickupDepartments: (profile.pickupDepartments || []).join(', '),
       },
+      features: combinedFeatures,
+      deliveryDepartments: (profile.deliveryDepartments || []).map((code) => code.toUpperCase()),
+      pickupDepartments: (profile.pickupDepartments || []).map((code) => code.toUpperCase()),
     });
     setIsEditing(true);
     setIsModalOpen(true);
@@ -134,7 +132,7 @@ const AdminProviders = () => {
   const closeModal = () => {
     setIsModalOpen(false);
     setIsEditing(false);
-    setFormState(defaultFormState);
+    setFormState(createDefaultFormState());
   };
 
   const handleChange = (field, value) => {
@@ -154,37 +152,101 @@ const AdminProviders = () => {
     }));
   };
 
-  const buildPayload = () => ({
-    name: formState.name,
-    description: formState.description,
-    notes: formState.notes,
-    coverage: formState.coverage,
-    contractFlexibility: formState.contractFlexibility,
-    leadTimeDays: formState.leadTimeDays,
-    onTimeRate: formState.onTimeRate,
-    pricePerKm: formState.pricePerKm,
-    baseHandlingFee: formState.baseHandlingFee,
-    minShipmentKg: formState.minShipmentKg,
-    co2GramsPerTonneKm: formState.co2GramsPerTonneKm,
-    customerSatisfaction: formState.customerSatisfaction,
-    modes: toList(formState.modes),
-    regions: toList(formState.regions),
-    serviceCapabilities: toList(formState.serviceCapabilities),
-    certifications: toList(formState.certifications),
-    profile: {
-      address: formState.profile.address,
-      postalCode: formState.profile.postalCode,
-      city: formState.profile.city,
-      department: formState.profile.department,
-      contact: formState.profile.contact,
-      phone: formState.profile.phone,
-      email: formState.profile.email,
-      unreachable: Boolean(formState.profile.unreachable),
-      features: toList(formState.profile.features),
-      deliveryDepartments: toList(formState.profile.deliveryDepartments),
-      pickupDepartments: toList(formState.profile.pickupDepartments),
-    },
-  });
+  const handleDepartmentsToggle = (field) => (code) => {
+    setFormState((prev) => {
+      const current = prev[field] || [];
+      const exists = current.includes(code);
+      const next = exists ? current.filter((item) => item !== code) : [...current, code];
+      return { ...prev, [field]: next };
+    });
+  };
+
+  const DepartmentPicker = ({ label, field }) => {
+    const [open, setOpen] = useState(false);
+    const containerRef = useRef(null);
+    const selected = formState[field] || [];
+
+    useEffect(() => {
+      const handleClickOutside = (event) => {
+        if (containerRef.current && !containerRef.current.contains(event.target)) {
+          setOpen(false);
+        }
+      };
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const summaryText = useMemo(() => {
+      if (!selected.length) {
+        return 'Aucun';
+      }
+      const labels = selected.map((code) => {
+        const match = departmentOptions.find((option) => option.value === code);
+        return match ? match.label : code;
+      });
+      if (labels.length <= 3) {
+        return labels.join(', ');
+      }
+      const displayed = labels.slice(0, 3).join(', ');
+      return `${displayed} +${labels.length - 3}`;
+    }, [selected, departmentOptions]);
+
+    return (
+      <div className={`dept-picker${open ? ' open' : ''}`} ref={containerRef}>
+        <button type="button" className="dept-picker-trigger" onClick={() => setOpen((prev) => !prev)}>
+          <span>{label}</span>
+          <span className="dept-picker-summary">
+            {summaryText}
+          </span>
+        </button>
+        {open && (
+          <div className="dept-picker-dropdown">
+            <div className="dept-picker-options">
+              {departmentOptions.map((option) => (
+                <label key={option.value} className="checkbox">
+                  <input
+                    type="checkbox"
+                    checked={selected.includes(option.value)}
+                    onChange={() => handleDepartmentsToggle(field)(option.value)}
+                  />
+                  <span>{option.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const buildPayload = () => {
+    const normalizeDepartment = (value) => (value ? value.trim().toUpperCase() : '');
+    const features = Array.from(new Set(formState.features));
+    const deliveryDepartments = formState.deliveryDepartments.map(normalizeDepartment).filter(Boolean);
+    const pickupDepartments = formState.pickupDepartments.map(normalizeDepartment).filter(Boolean);
+
+    return {
+      name: formState.name,
+      description: formState.description,
+      coverage: 'domestic',
+      contractFlexibility: 'spot',
+      modes: ['road'],
+      serviceCapabilities: features,
+      certifications: [],
+      profile: {
+        address: formState.profile.address,
+        postalCode: formState.profile.postalCode,
+        city: formState.profile.city,
+        department: normalizeDepartment(formState.profile.department),
+        contact: formState.profile.contact,
+        phone: formState.profile.phone,
+        unreachable: Boolean(formState.profile.unreachable),
+        features,
+        deliveryDepartments,
+        pickupDepartments,
+      },
+    };
+  };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -192,7 +254,7 @@ const AdminProviders = () => {
 
     try {
       if (isEditing) {
-        await apiClient.put('/admin/providers/' + formState.id, payload);
+        await apiClient.put('/admin/providers/' + encodeURIComponent(formState.id), payload);
       } else {
         await apiClient.post('/admin/providers', payload);
       }
@@ -208,7 +270,7 @@ const AdminProviders = () => {
       return;
     }
     try {
-      await apiClient.delete('/admin/providers/' + providerId);
+      await apiClient.delete('/admin/providers/' + encodeURIComponent(providerId));
       fetchProviders();
     } catch (err) {
       alert('Impossible de supprimer ce fournisseur.');
@@ -311,10 +373,9 @@ const AdminProviders = () => {
               <thead>
                 <tr>
                   <th>Nom</th>
-                  <th>Couverture</th>
-                  <th>Prix / km</th>
-                  <th>Base</th>
+                  <th>Adresse</th>
                   <th>Contact</th>
+                  <th>Téléphone</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -322,10 +383,9 @@ const AdminProviders = () => {
                 {providers.map((provider) => (
                   <tr key={provider.id}>
                     <td>{provider.name}</td>
-                    <td>{provider.coverage}</td>
-                    <td>{provider.pricePerKm && provider.pricePerKm.toFixed ? provider.pricePerKm.toFixed(2) : '--'} €</td>
-                    <td>{provider.baseHandlingFee && provider.baseHandlingFee.toFixed ? provider.baseHandlingFee.toFixed(2) : '--'} €</td>
-                    <td>{provider.profile && provider.profile.contact ? provider.profile.contact : '--'}</td>
+                    <td>{provider.profile?.address || '--'}</td>
+                    <td>{provider.profile?.contact || '--'}</td>
+                    <td>{provider.profile?.phone || '--'}</td>
                     <td className="table-actions">
                       <button type="button" onClick={() => openEditModal(provider)}>
                         Modifier
@@ -347,107 +407,26 @@ const AdminProviders = () => {
           <div className="admin-modal-content">
             <h2>{isEditing ? 'Modifier le fournisseur' : 'Nouveau fournisseur'}</h2>
             <form onSubmit={handleSubmit} className="admin-form">
-              <div className="form-grid">
-                <label>
-                  <span>Nom *</span>
-                  <input
-                    type="text"
-                    value={formState.name}
-                    onChange={(e) => handleChange('name', e.target.value)}
-                    required
-                  />
-                </label>
-                <label>
-                  <span>Couverture</span>
-                  <select
-                    value={formState.coverage}
-                    onChange={(e) => handleChange('coverage', e.target.value)}
-                  >
-                    <option value="domestic">National</option>
-                    <option value="regional">Régional</option>
-                    <option value="europe">Europe</option>
-                    <option value="global">Global</option>
-                  </select>
-                </label>
-                <label>
-                  <span>Flexibilité contrat</span>
-                  <select
-                    value={formState.contractFlexibility}
-                    onChange={(e) => handleChange('contractFlexibility', e.target.value)}
-                  >
-                    <option value="spot">Spot</option>
-                    <option value="monthly">Mensuel</option>
-                    <option value="quarterly">Trimestriel</option>
-                    <option value="annual">Annuel</option>
-                  </select>
-                </label>
-                <label>
-                  <span>Prix / km (€)</span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formState.pricePerKm}
-                    onChange={(e) => handleChange('pricePerKm', e.target.value)}
-                  />
-                </label>
-                <label>
-                  <span>Base (€)</span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formState.baseHandlingFee}
-                    onChange={(e) => handleChange('baseHandlingFee', e.target.value)}
-                  />
-                </label>
-                <label>
-                  <span>Délai (jours)</span>
-                  <input
-                    type="number"
-                    value={formState.leadTimeDays}
-                    onChange={(e) => handleChange('leadTimeDays', e.target.value)}
-                  />
-                </label>
-              </div>
+              <label>
+                <span>Nom du transporteur *</span>
+                <input
+                  type="text"
+                  value={formState.name}
+                  onChange={(e) => handleChange('name', e.target.value)}
+                  required
+                />
+              </label>
 
               <label>
-                <span>Description</span>
+                <span>Description / Remarque</span>
                 <textarea
                   value={formState.description}
                   onChange={(e) => handleChange('description', e.target.value)}
                 />
               </label>
 
-              <div className="form-grid">
-                <label>
-                  <span>Modes</span>
-                  <input
-                    type="text"
-                    value={formState.modes}
-                    onChange={(e) => handleChange('modes', e.target.value)}
-                    placeholder="road, air"
-                  />
-                </label>
-                <label>
-                  <span>Services</span>
-                  <input
-                    type="text"
-                    value={formState.serviceCapabilities}
-                    onChange={(e) => handleChange('serviceCapabilities', e.target.value)}
-                    placeholder="express, adr"
-                  />
-                </label>
-                <label>
-                  <span>Certifications</span>
-                  <input
-                    type="text"
-                    value={formState.certifications}
-                    onChange={(e) => handleChange('certifications', e.target.value)}
-                  />
-                </label>
-              </div>
-
               <fieldset className="form-fieldset">
-                <legend>Profil</legend>
+                <legend>Informations fournisseur</legend>
                 <div className="form-grid">
                   <label>
                     <span>Adresse</span>
@@ -478,7 +457,8 @@ const AdminProviders = () => {
                     <input
                       type="text"
                       value={formState.profile.department}
-                      onChange={(e) => handleProfileChange('department', e.target.value)}
+                      onChange={(e) => handleProfileChange('department', e.target.value.toUpperCase())}
+                      placeholder="01, 69..."
                     />
                   </label>
                   <label>
@@ -497,51 +477,38 @@ const AdminProviders = () => {
                       onChange={(e) => handleProfileChange('phone', e.target.value)}
                     />
                   </label>
-                  <label>
-                    <span>Email</span>
-                    <input
-                      type="email"
-                      value={formState.profile.email}
-                      onChange={(e) => handleProfileChange('email', e.target.value)}
-                    />
-                  </label>
                   <label className="checkbox">
                     <input
                       type="checkbox"
                       checked={formState.profile.unreachable}
                       onChange={(e) => handleProfileChange('unreachable', e.target.checked)}
                     />
-                    <span>Non joignable</span>
+                    <span>Ne répond pas</span>
                   </label>
                 </div>
-                <label>
-                  <span>Équipements / options</span>
-                  <input
-                    type="text"
-                    value={formState.profile.features}
-                    onChange={(e) => handleProfileChange('features', e.target.value)}
-                    placeholder="express, adr, semi-fourgon"
-                  />
-                </label>
-                <div className="form-grid">
-                  <label>
-                    <span>Départements de livraison</span>
-                    <input
-                      type="text"
-                      value={formState.profile.deliveryDepartments}
-                      onChange={(e) => handleProfileChange('deliveryDepartments', e.target.value)}
-                      placeholder="01, 69, 75"
-                    />
-                  </label>
-                  <label>
-                    <span>Départements de chargement</span>
-                    <input
-                      type="text"
-                      value={formState.profile.pickupDepartments}
-                      onChange={(e) => handleProfileChange('pickupDepartments', e.target.value)}
-                      placeholder="01, 69, 75"
-                    />
-                  </label>
+              </fieldset>
+
+              <fieldset className="form-fieldset">
+                <legend>Équipements / services</legend>
+                <div className="features-grid">
+                  {FEATURE_OPTIONS.map((option) => (
+                    <label key={option.value} className="checkbox">
+                      <input
+                        type="checkbox"
+                        checked={formState.features.includes(option.value)}
+                        onChange={() => handleDepartmentsToggle('features')(option.value)}
+                      />
+                      <span>{option.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+
+              <fieldset className="form-fieldset">
+                <legend>Départements couverts</legend>
+                <div className="dept-picker-grid">
+                  <DepartmentPicker label="Départ (chargement)" field="pickupDepartments" />
+                  <DepartmentPicker label="Arrivée (livraison)" field="deliveryDepartments" />
                 </div>
               </fieldset>
 
