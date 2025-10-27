@@ -439,8 +439,44 @@ const normalizeProviderPayload = (input, { partial = false } = {}) => {
   const data = input || {};
   const errors = [];
   const normalized = {};
+  const profile = {};
 
-  const processString = (field, { required = true, transform } = {}) => {
+  const getString = (value) => (value === undefined || value === null ? '' : String(value).trim());
+  const getArray = (value) => {
+    if (value === undefined || value === null) {
+      return [];
+    }
+    if (Array.isArray(value)) {
+      return value
+        .map((item) => getString(item))
+        .filter(Boolean);
+    }
+    return parseListInput(value);
+  };
+  const getNumber = (value) => {
+    const num = sanitizeNumber(value);
+    return num;
+  };
+  const getBoolean = (value) => {
+    if (typeof value === 'boolean') {
+      return value;
+    }
+    if (typeof value === 'string') {
+      const lower = value.trim().toLowerCase();
+      if (['1', 'true', 'oui', 'yes'].includes(lower)) {
+        return true;
+      }
+      if (['0', 'false', 'non', 'no'].includes(lower)) {
+        return false;
+      }
+    }
+    if (typeof value === 'number') {
+      return value !== 0;
+    }
+    return false;
+  };
+
+  const assignString = (field, { required = true, transform } = {}) => {
     if (data[field] === undefined) {
       if (!partial && required) {
         errors.push(`Le champ ${field} est requis.`);
@@ -448,12 +484,12 @@ const normalizeProviderPayload = (input, { partial = false } = {}) => {
       return;
     }
 
-    const raw = String(data[field] ?? '').trim();
-
+    const raw = getString(data[field]);
     if (!raw) {
-      if (required) {
+      if (required && !partial) {
         errors.push(`Le champ ${field} est requis.`);
-      } else {
+      }
+      if (!required || partial) {
         normalized[field] = '';
       }
       return;
@@ -462,7 +498,7 @@ const normalizeProviderPayload = (input, { partial = false } = {}) => {
     normalized[field] = transform ? transform(raw) : raw;
   };
 
-  const processList = (field, { required = true, transform } = {}) => {
+  const assignArray = (field, { transform, required = false } = {}) => {
     if (data[field] === undefined) {
       if (!partial && required) {
         errors.push(`Le champ ${field} est requis.`);
@@ -470,30 +506,21 @@ const normalizeProviderPayload = (input, { partial = false } = {}) => {
       return;
     }
 
-    const values = parseListInput(data[field]);
-
-    if (values.length === 0) {
-      if (required) {
-        errors.push(`Le champ ${field} doit contenir au moins une valeur.`);
-      } else {
-        normalized[field] = [];
-      }
+    const values = getArray(data[field]);
+    if (values.length === 0 && required && !partial) {
+      errors.push(`Le champ ${field} doit contenir au moins une valeur.`);
       return;
     }
 
     normalized[field] = transform ? values.map(transform) : values;
   };
 
-  const processNumber = (field, { required = true, min = 0, max = Number.POSITIVE_INFINITY, allowPercent = false } = {}) => {
+  const assignNumber = (field, { min = Number.NEGATIVE_INFINITY, max = Number.POSITIVE_INFINITY, allowPercent = false } = {}) => {
     if (data[field] === undefined) {
-      if (!partial && required) {
-        errors.push(`Le champ ${field} est requis.`);
-      }
       return;
     }
 
-    const numeric = sanitizeNumber(data[field]);
-
+    const numeric = getNumber(data[field]);
     if (numeric === undefined) {
       errors.push(`Le champ ${field} doit être un nombre.`);
       return;
@@ -513,35 +540,85 @@ const normalizeProviderPayload = (input, { partial = false } = {}) => {
     normalized[field] = resolved;
   };
 
-  processString('name');
-  processString('description');
-  processString('coverage', { transform: (value) => value.toLowerCase() });
-  processString('contractFlexibility', { transform: (value) => value.toLowerCase() });
-  processString('notes', { required: false });
+  if (data.name !== undefined || !partial) {
+    assignString('name');
+  }
 
-  processList('modes', { transform: (value) => value.toLowerCase() });
-  processList('regions', { transform: (value) => value.toUpperCase() });
-  processList('serviceCapabilities', { transform: (value) => value.toLowerCase() });
-  processList('certifications');
+  assignString('description', { required: false });
+  assignString('coverage', { required: false, transform: (value) => value.toLowerCase() });
+  assignString('contractFlexibility', { required: false, transform: (value) => value.toLowerCase() });
+  assignString('notes', { required: false });
 
-  processNumber('leadTimeDays', { min: 0 });
-  processNumber('onTimeRate', { min: 0, max: 1, allowPercent: true });
-  processNumber('pricePerKm', { min: 0 });
-  processNumber('baseHandlingFee', { min: 0 });
-  processNumber('minShipmentKg', { min: 0 });
-  processNumber('co2GramsPerTonneKm', { min: 0 });
-  processNumber('customerSatisfaction', { min: 0, max: 5 });
+  assignArray('modes', { transform: (value) => value.toLowerCase() });
+  assignArray('regions', { transform: (value) => value.toUpperCase() });
+  assignArray('serviceCapabilities', { transform: (value) => value.toLowerCase() });
+  assignArray('certifications');
+
+  assignNumber('leadTimeDays', { min: 0 });
+  assignNumber('onTimeRate', { min: 0, max: 1, allowPercent: true });
+  assignNumber('pricePerKm', { min: 0 });
+  assignNumber('baseHandlingFee', { min: 0 });
+  assignNumber('minShipmentKg', { min: 0 });
+  assignNumber('co2GramsPerTonneKm', { min: 0 });
+  assignNumber('customerSatisfaction', { min: 0, max: 5 });
+
+  if (data.modes === undefined && !partial) {
+    normalized.modes = ['road'];
+  }
+
+  const profileInput = data.profile || {};
+  if (data.profile !== undefined || !partial) {
+    const address = getString(profileInput.address);
+    const postalCode = getString(profileInput.postalCode);
+    const city = getString(profileInput.city);
+    const department = normalizeDepartmentFilter(profileInput.department);
+    const contact = getString(profileInput.contact);
+    const phone = getString(profileInput.phone);
+    const email = getString(profileInput.email);
+
+    if (address) profile.address = address;
+    if (postalCode) profile.postalCode = postalCode;
+    if (city) profile.city = city;
+    if (department) profile.department = department;
+    if (contact) profile.contact = contact;
+    if (phone) profile.phone = phone;
+    if (email) profile.email = email;
+
+    if (profileInput.unreachable !== undefined) {
+      profile.unreachable = getBoolean(profileInput.unreachable);
+    }
+
+    const profileFeatures = getArray(profileInput.features);
+    if (profileFeatures.length || (!partial && data.profile !== undefined)) {
+      profile.features = profileFeatures;
+    }
+
+    const deliveryDepartments = getArray(profileInput.deliveryDepartments).map(normalizeDepartmentFilter).filter(Boolean);
+    const pickupDepartments = getArray(profileInput.pickupDepartments).map(normalizeDepartmentFilter).filter(Boolean);
+
+    if (deliveryDepartments.length) {
+      profile.deliveryDepartments = deliveryDepartments;
+    }
+    if (pickupDepartments.length) {
+      profile.pickupDepartments = pickupDepartments;
+    }
+
+    const profileNotes = getString(profileInput.notes);
+    if (profileNotes) {
+      profile.notes = profileNotes;
+    }
+  }
+
+  if (Object.keys(profile).length > 0) {
+    normalized.profile = profile;
+  }
 
   if (data.id && typeof data.id === 'string') {
     normalized.id = data.id.trim();
   }
 
-  if (!partial && normalized.notes === undefined) {
-    normalized.notes = '';
-  }
-
   if (partial && Object.keys(normalized).length === 0) {
-    errors.push("Aucun champ valide à mettre à jour.");
+    errors.push('Aucun champ valide à mettre à jour.');
   }
 
   return { errors, value: normalized };

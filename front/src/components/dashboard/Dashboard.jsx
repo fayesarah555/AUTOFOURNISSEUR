@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import './dashboard.css';
 import apiClient from '../../utils/apiClient';
 
@@ -305,7 +306,7 @@ const SearchableMultiSelect = ({ label, options, selectedValues, onChange, place
 // Note: Le reste du code du Dashboard original doit être copié ici
 // Je vais créer une version simplifiée qui montre les changements principaux
 
-const Dashboard = ({ user, onLogout, onLoginRequest }) => {
+const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
   const isAuthenticated = Boolean(user);
   const displayName = user?.displayName || user?.id || 'Visiteur';
 
@@ -530,6 +531,11 @@ const Dashboard = ({ user, onLogout, onLoginRequest }) => {
           </div>
         </div>
         <div className="header-actions">
+          {isAdmin && (
+            <Link to="/admin" className="btn-create btn-create--active">
+              Espace admin
+            </Link>
+          )}
           <button
             type="button"
             className={`btn-create ${isAuthenticated ? 'btn-create--active' : 'btn-create--login'}`}

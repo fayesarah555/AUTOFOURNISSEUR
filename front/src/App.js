@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import Login from './components/login/Login';
 import Dashboard from './components/dashboard/Dashboard';
+import AdminProviders from './components/admin/AdminProviders';
 import apiClient from './utils/apiClient';
 
 const App = () => {
@@ -60,6 +61,8 @@ const App = () => {
     );
   }
 
+  const isAdmin = status === 'authenticated' && Array.isArray(user?.roles) && user.roles.includes('admin');
+
   return (
     <Routes>
       <Route
@@ -79,7 +82,14 @@ const App = () => {
             user={status === 'authenticated' ? user : null}
             onLogout={status === 'authenticated' ? handleLogout : undefined}
             onLoginRequest={status === 'authenticated' ? undefined : handleLoginRequest}
+            isAdmin={isAdmin}
           />
+        }
+      />
+      <Route
+        path="/admin"
+        element={
+          isAdmin ? <AdminProviders /> : <Navigate to={status === 'authenticated' ? '/' : '/login'} replace />
         }
       />
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -5,6 +5,7 @@ const {
   serviceByCode,
   serviceByFeature,
 } = require('../utils/providerMappings');
+const { importProviders } = require('../services/providerImportService');
 
 const clone = (value) => (value ? JSON.parse(JSON.stringify(value)) : null);
 
@@ -32,15 +33,6 @@ const toNumber = (value, fallback = 0) => {
 
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
-};
-
-const serializeArray = (value) => {
-  if (!value) {
-    return JSON.stringify([]);
-  }
-
-  const arr = Array.isArray(value) ? value : [value];
-  return JSON.stringify(arr);
 };
 
 const buildInClause = (ids) => {
@@ -296,79 +288,70 @@ const ensureUniqueExternalRef = async (candidate, baseName) => {
   }
 };
 
-const insertServiceCapabilities = async (conn, supplierId, capabilities = []) => {
-  await conn.query('DELETE FROM service_capabilities WHERE supplier_id = ?', [supplierId]);
+const buildProviderForImport = (base = {}, overrides = {}) => {
+  const merged = {
+    ...base,
+    ...overrides,
+    profile: {
+      ...(base.profile || {}),
+      ...(overrides.profile || {}),
+    },
+  };
 
-  for (const capability of capabilities) {
-    const normalized = capability.toLowerCase();
-    const definition = serviceByFeature.get(normalized);
-    if (!definition) {
-      continue;
-    }
+  const profile = merged.profile || {};
 
-    await conn.query(
-      `INSERT INTO service_capabilities (supplier_id, service_id, status)
-       VALUES (?, (SELECT id FROM service_types WHERE code = ?), 'yes')`,
-      [supplierId, definition.code]
-    );
-  }
+  return {
+    id: merged.id,
+    source_sheet: merged.source_sheet || merged.source || 'CUSTOM',
+    name: merged.name,
+    description: merged.description || '',
+    notes: merged.notes || '',
+    coverage: merged.coverage || 'domestic',
+    contractFlexibility: merged.contractFlexibility || 'spot',
+    modes: Array.isArray(merged.modes) ? merged.modes : [],
+    regions: Array.isArray(merged.regions) ? merged.regions : [],
+    serviceCapabilities: Array.isArray(merged.serviceCapabilities) ? merged.serviceCapabilities : [],
+    certifications: Array.isArray(merged.certifications) ? merged.certifications : [],
+    leadTimeDays: toNumber(merged.leadTimeDays, 0),
+    onTimeRate: toNumber(merged.onTimeRate, 0),
+    pricePerKm: toNumber(merged.pricePerKm, 0),
+    baseHandlingFee: toNumber(merged.baseHandlingFee, 0),
+    minShipmentKg: toNumber(merged.minShipmentKg, 0),
+    co2GramsPerTonneKm: toNumber(merged.co2GramsPerTonneKm, 0),
+    customerSatisfaction: toNumber(merged.customerSatisfaction, 0),
+    profile: {
+      address: profile.address || '',
+      postalCode: profile.postalCode || '',
+      city: profile.city || '',
+      department: profile.department || '',
+      contact: profile.contact || '',
+      phone: profile.phone || '',
+      email: profile.email || '',
+      unreachable: Boolean(profile.unreachable),
+      features: Array.isArray(profile.features) ? profile.features : [],
+      deliveryDepartments: Array.isArray(profile.deliveryDepartments)
+        ? profile.deliveryDepartments
+        : [],
+      pickupDepartments: Array.isArray(profile.pickupDepartments)
+        ? profile.pickupDepartments
+        : [],
+      notes: profile.notes || '',
+    },
+  };
 };
 
 const addProvider = async (providerInput) => {
   const baseName = providerInput.name || 'Provider';
   const externalRef = await ensureUniqueExternalRef(providerInput.id, baseName);
 
-  const conn = await pool.getConnection();
-  try {
-    await conn.beginTransaction();
+  const importPayload = buildProviderForImport({
+    id: externalRef,
+    source_sheet: 'CUSTOM',
+  }, providerInput);
 
-    const insertResult = await conn.query(
-      `INSERT INTO suppliers (
-        external_ref, source_sheet, name, description, address, postal_code, city,
-        department_code, country_code, status, coverage, contract_flexibility,
-        lead_time_days, on_time_rate, price_per_km, base_handling_fee,
-        min_shipment_kg, co2_grams_per_tonne_km, customer_satisfaction,
-        modes_json, regions_json, certifications_json, unreachable, notes
-      ) VALUES (
-        ?, 'CUSTOM', ?, ?, NULL, NULL, NULL,
-        NULL, 'FR', 'active', ?, ?,
-        ?, ?, ?, ?,
-        ?, ?, ?,
-        ?, ?, ?, 0, ?
-      )`,
-      [
-        externalRef,
-        providerInput.name,
-        providerInput.description || null,
-        providerInput.coverage || 'domestic',
-        providerInput.contractFlexibility || 'spot',
-        providerInput.leadTimeDays || 0,
-        providerInput.onTimeRate || 0,
-        providerInput.pricePerKm || 0,
-        providerInput.baseHandlingFee || 0,
-        providerInput.minShipmentKg || 0,
-        providerInput.co2GramsPerTonneKm || 0,
-        providerInput.customerSatisfaction || 0,
-        serializeArray(providerInput.modes || ['road']),
-        serializeArray(providerInput.regions || []),
-        serializeArray(providerInput.certifications || []),
-        providerInput.notes || null,
-      ]
-    );
+  await importProviders([importPayload], { sourceSheet: 'CUSTOM' });
 
-    const supplierId = insertResult.insertId;
-    await insertServiceCapabilities(conn, supplierId, providerInput.serviceCapabilities || []);
-
-    await conn.commit();
-  } catch (error) {
-    await conn.rollback();
-    throw error;
-  } finally {
-    conn.release();
-  }
-
-  const provider = await findProviderById(externalRef);
-  return provider;
+  return findProviderById(externalRef);
 };
 
 const updateProvider = async (externalRef, updates) => {
@@ -376,65 +359,37 @@ const updateProvider = async (externalRef, updates) => {
   if (!rows.length) {
     return null;
   }
+  const currentProvider = await hydrateProviders(rows);
+  const base = currentProvider[0] || {};
 
-  const conn = await pool.getConnection();
-  try {
-    await conn.beginTransaction();
+  const importPayload = buildProviderForImport(
+    {
+      id: base.id,
+      source_sheet: base.source || 'CUSTOM',
+      name: base.name,
+      description: base.description,
+      notes: base.notes,
+      coverage: base.coverage,
+      contractFlexibility: base.contractFlexibility,
+      modes: base.modes,
+      regions: base.regions,
+      serviceCapabilities: base.serviceCapabilities,
+      certifications: base.certifications,
+      leadTimeDays: base.leadTimeDays,
+      onTimeRate: base.onTimeRate,
+      pricePerKm: base.pricePerKm,
+      baseHandlingFee: base.baseHandlingFee,
+      minShipmentKg: base.minShipmentKg,
+      co2GramsPerTonneKm: base.co2GramsPerTonneKm,
+      customerSatisfaction: base.customerSatisfaction,
+      profile: base.profile,
+    },
+    updates
+  );
 
-    await conn.query(
-      `UPDATE suppliers SET
-        name = COALESCE(?, name),
-        description = COALESCE(?, description),
-        coverage = COALESCE(?, coverage),
-        contract_flexibility = COALESCE(?, contract_flexibility),
-        lead_time_days = COALESCE(?, lead_time_days),
-        on_time_rate = COALESCE(?, on_time_rate),
-        price_per_km = COALESCE(?, price_per_km),
-        base_handling_fee = COALESCE(?, base_handling_fee),
-        min_shipment_kg = COALESCE(?, min_shipment_kg),
-        co2_grams_per_tonne_km = COALESCE(?, co2_grams_per_tonne_km),
-        customer_satisfaction = COALESCE(?, customer_satisfaction),
-        modes_json = COALESCE(?, modes_json),
-        regions_json = COALESCE(?, regions_json),
-        certifications_json = COALESCE(?, certifications_json),
-        notes = COALESCE(?, notes),
-        updated_at = CURRENT_TIMESTAMP
-      WHERE external_ref = ?`,
-      [
-        updates.name || null,
-        updates.description || null,
-        updates.coverage || null,
-        updates.contractFlexibility || null,
-        updates.leadTimeDays ?? null,
-        updates.onTimeRate ?? null,
-        updates.pricePerKm ?? null,
-        updates.baseHandlingFee ?? null,
-        updates.minShipmentKg ?? null,
-        updates.co2GramsPerTonneKm ?? null,
-        updates.customerSatisfaction ?? null,
-        updates.modes ? serializeArray(updates.modes) : null,
-        updates.regions ? serializeArray(updates.regions) : null,
-        updates.certifications ? serializeArray(updates.certifications) : null,
-        updates.notes ?? null,
-        externalRef,
-      ]
-    );
+  await importProviders([importPayload], { sourceSheet: importPayload.source_sheet || 'CUSTOM' });
 
-    if (updates.serviceCapabilities) {
-      const current = rows[0];
-      await insertServiceCapabilities(conn, current.id, updates.serviceCapabilities);
-    }
-
-    await conn.commit();
-  } catch (error) {
-    await conn.rollback();
-    throw error;
-  } finally {
-    conn.release();
-  }
-
-  const provider = await findProviderById(externalRef);
-  return provider;
+  return findProviderById(externalRef);
 };
 
 const deleteProvider = async (externalRef) => {

@@ -1,18 +1,16 @@
 const express = require('express');
-const path = require('path');
-const fs = require('fs');
-const multer = require('multer');
-const { requireAuth, requireAdmin } = require('../middleware/authMiddleware');
-const { getProfile } = require('../controllers/profileController');
+const { requireAdmin } = require('../middleware/authMiddleware');
 const {
   listProviders,
-  getProvidersByIds,
   getProviderById,
   createProvider,
   updateProvider,
   deleteProvider,
 } = require('../controllers/providerController');
 const { importExcelProviders } = require('../controllers/providerImportController');
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 
 const router = express.Router();
 
@@ -26,12 +24,8 @@ const upload = multer({
   },
 });
 
-router.get('/providers', listProviders);
-router.get('/providers/batch', getProvidersByIds);
-router.get('/providers/:id', getProviderById);
-
-router.get('/me', requireAuth, getProfile);
-
+router.get('/providers', requireAdmin, listProviders);
+router.get('/providers/:id', requireAdmin, getProviderById);
 router.post('/providers', requireAdmin, createProvider);
 router.put('/providers/:id', requireAdmin, updateProvider);
 router.delete('/providers/:id', requireAdmin, deleteProvider);

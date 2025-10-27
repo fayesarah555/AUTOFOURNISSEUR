@@ -334,3 +334,4 @@ const providers = loadSeedProviders();
 module.exports = providers;
 module.exports.loadSeedProviders = loadSeedProviders;
 module.exports.EXCEL_PATH = EXCEL_PATH;
+module.exports.loadFromExcel = loadFromExcel;
