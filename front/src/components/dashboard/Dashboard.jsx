@@ -203,7 +203,7 @@ const FRENCH_DEPARTMENT_NAMES = {
 };
 
 // Composant SearchableMultiSelect pour les filtres avec recherche
-const SearchableMultiSelect = ({ label, options, selectedValues, onChange, placeholder }) => {
+const SearchableMultiSelect = ({ label, options, selectedValues, onChange, placeholder, disabled }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const dropdownRef = useRef(null);
@@ -239,21 +239,26 @@ const SearchableMultiSelect = ({ label, options, selectedValues, onChange, place
     .map(opt => opt.label)
     .join(', ');
 
+  const isDisabled = disabled || options.length === 0;
+
   return (
-    <div className="searchable-select" ref={dropdownRef}>
+    <div className={`searchable-select ${isDisabled ? 'searchable-select--disabled' : ''}`} ref={dropdownRef}>
       <button
         type="button"
         className="select-trigger"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => !isDisabled && setIsOpen(!isOpen)}
+        disabled={isDisabled}
       >
         <span className="select-label">{label}</span>
         <span className="select-value">
-          {selectedValues.length > 0 ? `${selectedValues.length} sélectionné(s)` : placeholder || 'Tous'}
+          {selectedValues.length > 0
+            ? `${selectedValues.length} sélectionné(s)`
+            : placeholder || (isDisabled ? 'Indisponible' : 'Tous')}
         </span>
         <span className={`select-arrow ${isOpen ? 'open' : ''}`}>▼</span>
       </button>
-      
-      {isOpen && (
+
+      {isOpen && !isDisabled && (
         <div className="select-dropdown">
           <div className="select-search">
             <input
@@ -316,6 +321,8 @@ const Dashboard = ({ user, onLogout, onLoginRequest }) => {
   const [meta, setMeta] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [estimationDeparture, setEstimationDeparture] = useState('');
+  const [estimationArrival, setEstimationArrival] = useState('');
 
   // Fonction pour mettre à jour les filtres
   const updateFormState = (key, value) => {
@@ -340,6 +347,66 @@ const Dashboard = ({ user, onLogout, onLoginRequest }) => {
     return [...base, pageSize].sort((a, b) => a - b);
   }, [meta, pageSize]);
 
+  const deliveryDepartmentOptions = useMemo(() => {
+    const codes = meta?.availableFilters?.deliveryDepartments || [];
+    return codes.map((code) => ({
+      value: code,
+      label: `${code} - ${FRENCH_DEPARTMENT_NAMES[code] || 'Département ' + code}`,
+    }));
+  }, [meta]);
+
+  const pickupDepartmentOptions = useMemo(() => {
+    const codes = meta?.availableFilters?.pickupDepartments || [];
+    return codes.map((code) => ({
+      value: code,
+      label: `${code} - ${FRENCH_DEPARTMENT_NAMES[code] || 'Département ' + code}`,
+    }));
+  }, [meta]);
+
+  const departmentOptionsAll = useMemo(() => {
+    const map = new Map();
+    [...deliveryDepartmentOptions, ...pickupDepartmentOptions].forEach((option) => {
+      if (!map.has(option.value)) {
+        map.set(option.value, option);
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => a.value.localeCompare(b.value));
+  }, [deliveryDepartmentOptions, pickupDepartmentOptions]);
+
+  const appliedDistanceKm = useMemo(() => {
+    const fromMeta = meta?.estimatedDistanceKm;
+    if (typeof fromMeta === 'number' && Number.isFinite(fromMeta)) {
+      return fromMeta;
+    }
+    const value = Number(meta?.appliedFilters?.distanceKm ?? appliedFilters.distanceKm);
+    return Number.isFinite(value) && value >= 0 ? value : null;
+  }, [meta, appliedFilters.distanceKm]);
+
+  const currencyFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat('fr-FR', {
+        style: 'currency',
+        currency: 'EUR',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }),
+    []
+  );
+
+  const bestScore = useMemo(() => {
+    let maxScore = null;
+    providers.forEach((provider) => {
+      const score = Number(provider.score);
+      if (!Number.isFinite(score)) {
+        return;
+      }
+      if (maxScore === null || score > maxScore) {
+        maxScore = score;
+      }
+    });
+    return maxScore;
+  }, [providers]);
+
   const handleApplyFilters = useCallback(() => {
     setAppliedFilters({ ...formState });
     setPage(1);
@@ -350,6 +417,8 @@ const Dashboard = ({ user, onLogout, onLoginRequest }) => {
     setFormState(empty);
     setAppliedFilters(empty);
     setPage(1);
+    setEstimationDeparture('');
+    setEstimationArrival('');
   }, []);
 
   useEffect(() => {
@@ -403,6 +472,14 @@ const Dashboard = ({ user, onLogout, onLoginRequest }) => {
         params.requireWeightMatch = 'true';
       }
 
+      if (estimationDeparture) {
+        params.departureDepartment = estimationDeparture;
+      }
+
+      if (estimationArrival) {
+        params.arrivalDepartment = estimationArrival;
+      }
+
       try {
         const { data } = await apiClient.get('/api/providers', { params });
 
@@ -433,7 +510,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest }) => {
     return () => {
       isCancelled = true;
     };
-  }, [appliedFilters, page, pageSize, sortBy, sortOrder]);
+  }, [appliedFilters, page, pageSize, sortBy, sortOrder, estimationDeparture, estimationArrival]);
 
   return (
     <div className="dashboard-improved">
@@ -566,6 +643,58 @@ const Dashboard = ({ user, onLogout, onLoginRequest }) => {
               />
             </div>
 
+            <div className="estimation-controls">
+              <div className="filter-group">
+                <label>
+                  <span>Départ (estimation)</span>
+                  <select
+                    value={estimationDeparture}
+                    onChange={(e) => {
+                      setEstimationDeparture(e.target.value);
+                      setPage(1);
+                    }}
+                  >
+                    <option value="">Sélectionner</option>
+                    {departmentOptionsAll.map((option) => (
+                      <option key={`depart-${option.value}`} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="filter-group">
+                <label>
+                  <span>Arrivée (estimation)</span>
+                  <select
+                    value={estimationArrival}
+                    onChange={(e) => {
+                      setEstimationArrival(e.target.value);
+                      setPage(1);
+                    }}
+                  >
+                    <option value="">Sélectionner</option>
+                    {departmentOptionsAll.map((option) => (
+                      <option key={`arrivee-${option.value}`} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="estimation-info">
+                {appliedDistanceKm ? (
+                  <span>
+                    Distance estimée : <strong>{appliedDistanceKm.toFixed(1)} km</strong>
+                    {meta?.estimatedDistanceSource === 'departments' && ' (calcul automatique)'}
+                    {meta?.estimatedDistanceSource === 'manual' && ' (distance saisie)'}
+                  </span>
+                ) : (
+                  <span>Saisissez une distance ou sélectionnez départ/arrivée</span>
+                )}
+              </div>
+            </div>
+
             <div className="filters-actions">
               <button type="button" className="btn-apply" onClick={handleApplyFilters}>
                 Appliquer les filtres
@@ -656,13 +785,21 @@ const Dashboard = ({ user, onLogout, onLoginRequest }) => {
                       <th>Satisfaction</th>
                       <th>Délai</th>
                       <th>Prix/km</th>
+                      <th>{appliedDistanceKm ? `Estimation (${appliedDistanceKm} km)` : 'Estimation'}</th>
                       <th>CO₂</th>
                       <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {providers.map((provider) => (
-                      <tr key={provider.id}>
+                    {providers.map((provider) => {
+                      const providerScore = Number(provider.score);
+                      const isBest =
+                        bestScore !== null &&
+                        Number.isFinite(providerScore) &&
+                        Math.abs(providerScore - bestScore) < 0.0001;
+
+                      return (
+                        <tr key={provider.id} className={isBest ? 'best-result' : undefined}>
                         <td>
                           <div className="provider-info">
                             <strong>{provider.name}</strong>
@@ -673,12 +810,21 @@ const Dashboard = ({ user, onLogout, onLoginRequest }) => {
                         <td>{provider.customerSatisfaction?.toFixed(1) || '--'} / 5</td>
                         <td>{provider.leadTimeDays || '--'} j</td>
                         <td>{provider.pricePerKm?.toFixed(2) || '--'} €</td>
+                        <td>
+                          {appliedDistanceKm
+                            ? currencyFormatter.format(
+                                (Number(provider.baseHandlingFee) || 0) +
+                                  (Number(provider.pricePerKm) || 0) * appliedDistanceKm
+                              )
+                            : '--'}
+                        </td>
                         <td>{provider.co2GramsPerTonneKm || '--'} g/t.km</td>
                         <td>
                           <button className="btn-compare">Comparer</button>
                         </td>
-                      </tr>
-                    ))}
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               )}

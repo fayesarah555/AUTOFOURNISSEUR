@@ -234,6 +234,36 @@ body {
   margin-bottom: 20px;
 }
 
+.estimation-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+  align-items: end;
+}
+
+.estimation-controls select {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  font-size: 0.875rem;
+  color: var(--color-text);
+}
+
+.estimation-info {
+  padding: 12px 16px;
+  border: 1px dashed var(--color-border);
+  border-radius: 8px;
+  background: var(--color-soft);
+  font-size: 0.875rem;
+  color: var(--color-muted);
+}
+
+.estimation-info strong {
+  color: var(--color-text);
+}
+
 .control-inline {
   display: flex;
   flex-direction: column;
@@ -279,6 +309,10 @@ body {
   position: relative;
 }
 
+.searchable-select--disabled {
+  opacity: 0.6;
+}
+
 .select-trigger {
   width: 100%;
   padding: 12px 16px;
@@ -297,6 +331,17 @@ body {
 .select-trigger:hover {
   background: white;
   border-color: var(--color-accent);
+}
+
+.select-trigger:disabled,
+.searchable-select--disabled .select-trigger {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.searchable-select--disabled .select-trigger:hover {
+  background: var(--color-soft);
+  border-color: var(--color-border);
 }
 
 .select-label {
@@ -548,6 +593,20 @@ body {
 
 .providers-table tbody tr:hover {
   background: var(--color-soft);
+}
+
+.providers-table tbody tr.best-result {
+  outline: 2px solid var(--color-positive);
+  outline-offset: -2px;
+  background: rgba(22, 163, 74, 0.08);
+}
+
+.providers-table tbody tr.best-result:hover {
+  background: rgba(22, 163, 74, 0.12);
+}
+
+.providers-table tbody tr.best-result strong {
+  color: var(--color-positive);
 }
 
 .providers-table td {

@@ -5,6 +5,10 @@ const {
   updateProvider,
   deleteProvider,
 } = require('../repositories/providerRepository');
+const {
+  computeDepartmentDistanceKm,
+  normalizeDepartmentCode,
+} = require('../utils/departmentGeo');
 
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 50;
@@ -71,7 +75,7 @@ const normalizeDepartmentFilter = (value) => {
     return parsed.toString().padStart(2, '0');
   }
 
-  return trimmed;
+  return trimmed.toUpperCase();
 };
 
 const enrichProvider = (provider, { distanceKm, weightKg } = {}) => {
@@ -239,26 +243,31 @@ const sortProviders = (items, sortBy, sortOrder) => {
 const listProviders = async (req, res, next) => {
   try {
     const {
-    q,
-    modes,
-    coverage,
-    regions,
-    services,
-    certifications,
-    minRating,
-    minOnTimeRate,
-    maxLeadTime,
-    maxCo2,
-    contractFlexibility,
-    requireWeightMatch,
-    maxPrice,
-    sortBy = 'score',
-    sortOrder = 'desc',
-    page = 1,
-    pageSize = DEFAULT_PAGE_SIZE,
-    weightKg,
-    distanceKm,
+      q,
+      modes,
+      coverage,
+      regions,
+      services,
+      certifications,
+      minRating,
+      minOnTimeRate,
+      maxLeadTime,
+      maxCo2,
+      contractFlexibility,
+      requireWeightMatch,
+      maxPrice,
+      sortBy = 'score',
+      sortOrder = 'desc',
+      page = 1,
+      pageSize = DEFAULT_PAGE_SIZE,
+      weightKg,
+      distanceKm,
+      departureDepartment,
+      arrivalDepartment,
     } = req.query;
+
+    const normalizedDepartureDepartment = normalizeDepartmentFilter(departureDepartment);
+    const normalizedArrivalDepartment = normalizeDepartmentFilter(arrivalDepartment);
 
     const filters = {
       query: typeof q === 'string' ? q.trim().toLowerCase() : '',
@@ -281,7 +290,31 @@ const listProviders = async (req, res, next) => {
       pickupDepartments: parseCsv(req.query.pickupDepartments)
         .map(normalizeDepartmentFilter)
         .filter(Boolean),
+      departureDepartment: normalizedDepartureDepartment,
+      arrivalDepartment: normalizedArrivalDepartment,
     };
+
+    const manualDistanceKm = sanitizeNumber(distanceKm);
+    const autoDistanceKm =
+      normalizedDepartureDepartment && normalizedArrivalDepartment
+        ? computeDepartmentDistanceKm(normalizedDepartureDepartment, normalizedArrivalDepartment)
+        : null;
+
+    let effectiveDistanceKm = manualDistanceKm;
+    let distanceSource = null;
+
+    if (typeof manualDistanceKm === 'number') {
+      distanceSource = 'manual';
+    }
+
+    if (typeof effectiveDistanceKm !== 'number' && typeof autoDistanceKm === 'number') {
+      effectiveDistanceKm = autoDistanceKm;
+      distanceSource = 'departments';
+    }
+
+    if (typeof effectiveDistanceKm === 'number') {
+      filters.distanceKm = effectiveDistanceKm;
+    }
 
     const parsedPageSize = Number(pageSize);
     const canonicalPageSize = PAGE_SIZE_OPTIONS.includes(parsedPageSize)
@@ -291,7 +324,7 @@ const listProviders = async (req, res, next) => {
 
     const dataset = await repositoryListProviders();
     const enriched = dataset.map((provider) =>
-      enrichProvider(provider, { distanceKm, weightKg })
+      enrichProvider(provider, { distanceKm: effectiveDistanceKm, weightKg })
     );
     const filtered = applyFilters(enriched, filters);
 
@@ -348,6 +381,11 @@ const listProviders = async (req, res, next) => {
       sortOrder: resolvedSortOrder,
       pageSizeOptions: PAGE_SIZE_OPTIONS,
       appliedFilters: filters,
+      estimatedDistanceKm:
+        typeof effectiveDistanceKm === 'number'
+          ? Math.round(effectiveDistanceKm * 10) / 10
+          : null,
+      estimatedDistanceSource: distanceSource,
         hasNextPage: currentPage < totalPages,
         hasPreviousPage: currentPage > 1,
         availableFilters: {
