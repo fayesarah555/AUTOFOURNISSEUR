@@ -22,6 +22,86 @@ const createEmptyFilters = () => ({
   pickupDepartments: [],
 });
 
+const SAVED_SEARCHES_KEY = 'autofournisseur.savedSearches';
+
+const cloneFilters = (filters) => {
+  const base = { ...createEmptyFilters(), ...(filters || {}) };
+  return {
+    ...base,
+    modes: [...(base.modes || [])],
+    coverage: [...(base.coverage || [])],
+    regions: [...(base.regions || [])],
+    features: [...(base.features || [])],
+    contractFlexibility: [...(base.contractFlexibility || [])],
+    deliveryDepartments: [...(base.deliveryDepartments || [])],
+    pickupDepartments: [...(base.pickupDepartments || [])],
+  };
+};
+
+const createSavedSearchId = () => {
+  if (typeof window !== 'undefined' && window.crypto?.randomUUID) {
+    return window.crypto.randomUUID();
+  }
+  return `search-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+};
+
+const loadSavedSearches = () => {
+  try {
+    const raw = window.localStorage.getItem(SAVED_SEARCHES_KEY);
+    if (!raw) {
+      return [];
+    }
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed
+      .map((item) => ({
+        id: typeof item.id === 'string' ? item.id : createSavedSearchId(),
+        name: typeof item.name === 'string' && item.name.trim() ? item.name.trim() : 'Recherche',
+        filters: cloneFilters(item.filters),
+        lastUsedAt: item.lastUsedAt || null,
+        estimationDeparture: typeof item.estimationDeparture === 'string' ? item.estimationDeparture : '',
+        estimationArrival: typeof item.estimationArrival === 'string' ? item.estimationArrival : '',
+      }))
+      .slice(0, 20);
+  } catch (error) {
+    console.warn('Failed to load saved searches from localStorage', error);
+    return [];
+  }
+};
+
+const persistSavedSearches = (searches) => {
+  try {
+    const payload = searches.map(({ id, name, filters, lastUsedAt, estimationDeparture, estimationArrival }) => ({
+      id,
+      name,
+      filters,
+      lastUsedAt,
+      estimationDeparture,
+      estimationArrival,
+    }));
+    window.localStorage.setItem(SAVED_SEARCHES_KEY, JSON.stringify(payload));
+  } catch (error) {
+    console.warn('Failed to persist saved searches', error);
+  }
+};
+
+const formatSavedSearchTimestamp = (value) => {
+  if (!value) {
+    return null;
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+  return date.toLocaleDateString('fr-FR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+};
+
 const MODE_OPTIONS = [
   { value: 'road', label: 'Routier' },
   { value: 'rail', label: 'Rail' },
@@ -315,6 +395,8 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
   const [appliedFilters, setAppliedFilters] = useState(createEmptyFilters());
   const [formState, setFormState] = useState(createEmptyFilters());
   const [filtersExpanded, setFiltersExpanded] = useState(true);
+  const [savedSearches, setSavedSearches] = useState(() => (typeof window === 'undefined' ? [] : loadSavedSearches()));
+  const [savePresetName, setSavePresetName] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [sortBy, setSortBy] = useState('score');
@@ -408,6 +490,27 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
     return maxScore;
   }, [providers]);
 
+  const sortedSavedSearches = useMemo(() => {
+    const entries = savedSearches.map((entry) => ({ ...entry }));
+    entries.sort((a, b) => {
+      const aTime = a.lastUsedAt || '';
+      const bTime = b.lastUsedAt || '';
+      if (aTime && bTime) {
+        return bTime.localeCompare(aTime);
+      }
+      if (aTime) {
+        return -1;
+      }
+      if (bTime) {
+        return 1;
+      }
+      return a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' });
+    });
+    return entries;
+  }, [savedSearches]);
+
+  const canSaveSearch = savePresetName.trim().length > 0;
+
   const handleApplyFilters = useCallback(() => {
     setAppliedFilters({ ...formState });
     setPage(1);
@@ -421,6 +524,67 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
     setEstimationDeparture('');
     setEstimationArrival('');
   }, []);
+
+  const handleSaveCurrentSearch = useCallback(() => {
+    const trimmedName = savePresetName.trim();
+    if (!trimmedName) {
+      return;
+    }
+    const snapshot = cloneFilters(formState);
+    const timestamp = new Date().toISOString();
+    const estimation = {
+      departure: estimationDeparture,
+      arrival: estimationArrival,
+    };
+    setSavedSearches((prev) => {
+      const withoutDuplicateName = prev.filter(
+        (item) => item.name.localeCompare(trimmedName, 'fr', { sensitivity: 'base' }) !== 0
+      );
+      return [
+        {
+          id: createSavedSearchId(),
+          name: trimmedName,
+          filters: snapshot,
+          lastUsedAt: timestamp,
+          estimationDeparture: estimation.departure,
+          estimationArrival: estimation.arrival,
+        },
+        ...withoutDuplicateName,
+      ].slice(0, 20);
+    });
+    setSavePresetName('');
+    handleApplyFilters();
+    setFiltersExpanded(true);
+  }, [formState, handleApplyFilters, savePresetName, estimationDeparture, estimationArrival]);
+
+  const handleApplySavedSearch = useCallback((entry) => {
+    const snapshot = cloneFilters(entry.filters);
+    setFormState(snapshot);
+    setAppliedFilters(snapshot);
+    setPage(1);
+    setFiltersExpanded(true);
+    setEstimationDeparture(entry.estimationDeparture || '');
+    setEstimationArrival(entry.estimationArrival || '');
+    const timestamp = new Date().toISOString();
+    setSavedSearches((prev) =>
+      prev.map((item) =>
+        item.id === entry.id
+          ? { ...item, lastUsedAt: timestamp, estimationDeparture: entry.estimationDeparture || '', estimationArrival: entry.estimationArrival || '' }
+          : item
+      )
+    );
+  }, []);
+
+  const handleDeleteSavedSearch = useCallback((id) => {
+    setSavedSearches((prev) => prev.filter((item) => item.id !== id));
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    persistSavedSearches(savedSearches);
+  }, [savedSearches]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -698,14 +862,72 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                 ) : (
                   <span>Saisissez une distance ou sélectionnez départ/arrivée</span>
                 )}
+                </div>
               </div>
-            </div>
 
-            <div className="filters-actions">
-              <button type="button" className="btn-apply" onClick={handleApplyFilters}>
-                Appliquer les filtres
-              </button>
-              <button 
+              <div className="saved-searches-panel">
+                <div className="saved-searches-save">
+                  <label>
+                    <span>Nom de la recherche</span>
+                    <input
+                      type="text"
+                      value={savePresetName}
+                      onChange={(e) => setSavePresetName(e.target.value)}
+                      placeholder="Ex : Paris vers Lyon"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="btn-save-search"
+                    onClick={handleSaveCurrentSearch}
+                    disabled={!canSaveSearch}
+                  >
+                    Enregistrer
+                  </button>
+                </div>
+
+                {sortedSavedSearches.length > 0 && (
+                  <div className="saved-searches-list">
+                    <span className="saved-searches-title">Recherches enregistrÃ©es</span>
+                    <div className="saved-searches-chips">
+                      {sortedSavedSearches.map((search) => {
+                        const lastUsedLabel = formatSavedSearchTimestamp(search.lastUsedAt);
+                        return (
+                          <div key={search.id} className="saved-search-chip">
+                            <button
+                              type="button"
+                              className="saved-search-apply"
+                              onClick={() => handleApplySavedSearch(search)}
+                              title={lastUsedLabel ? `Dernier usage : ${lastUsedLabel}` : 'Appliquer cette recherche'}
+                            >
+                              <span className="saved-search-name">{search.name}</span>
+                              {(search.estimationDeparture || search.estimationArrival) && (
+                                <small className="saved-search-meta">
+                                  {search.estimationDeparture || '---'} â†’ {search.estimationArrival || '---'}
+                                </small>
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              className="saved-search-delete"
+                              onClick={() => handleDeleteSavedSearch(search.id)}
+                              aria-label={`Supprimer la recherche ${search.name}`}
+                            >
+                              &times;
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="filters-actions">
+                <button type="button" className="btn-apply" onClick={handleApplyFilters}>
+                  Appliquer les filtres
+                </button>
+                <button 
                 type="button" 
                 className="btn-reset"
                 onClick={handleResetFilters}

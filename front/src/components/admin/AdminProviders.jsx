@@ -49,7 +49,7 @@ const createDefaultFormState = () => ({
   pickupDepartments: [],
 });
 
-const AdminProviders = () => {
+const AdminProviders = ({ onLogout }) => {
   const [providers, setProviders] = useState([]);
   const [meta, setMeta] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -315,11 +315,16 @@ const AdminProviders = () => {
           <h1>Espace Admin - Fournisseurs</h1>
           <p>Gestion des transporteurs et import Excel.</p>
         </div>
-        <div className="admin-header-actions">
-          <button type="button" className="btn" onClick={openCreateModal}>
-            Nouveau fournisseur
-          </button>
-          <form className="import-form" onSubmit={handleImportSubmit}>
+          <div className="admin-header-actions">
+            {onLogout && (
+              <button type="button" className="btn" onClick={onLogout}>
+                Se deconnecter
+              </button>
+            )}
+            <button type="button" className="btn" onClick={openCreateModal}>
+              Nouveau fournisseur
+            </button>
+            <form className="import-form" onSubmit={handleImportSubmit}>
             <input
               type="file"
               accept=".xlsx,.xls"

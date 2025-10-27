@@ -95,7 +95,7 @@ const App = () => {
       <Route
         path="/admin"
         element={
-          isAdmin ? <AdminProviders /> : <Navigate to={status === 'authenticated' ? '/' : '/login'} replace />
+          isAdmin ? <AdminProviders onLogout={handleLogout} /> : <Navigate to={status === 'authenticated' ? '/' : '/login'} replace />
         }
       />
       <Route path="*" element={<Navigate to="/" replace />} />
