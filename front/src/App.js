@@ -76,7 +76,7 @@ const App = () => {
         path="/"
         element={
           <Dashboard
-            user={user}
+            user={status === 'authenticated' ? user : null}
             onLogout={status === 'authenticated' ? handleLogout : undefined}
             onLoginRequest={status === 'authenticated' ? undefined : handleLoginRequest}
           />

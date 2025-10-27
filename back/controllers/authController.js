@@ -46,7 +46,7 @@ const login = (req, res) => {
 
 const checkSession = (req, res) => {
   if (!hasValidSession(req.session)) {
-    return res.status(401).json({ loggedIn: false });
+    return res.status(200).json({ loggedIn: false, user: null });
   }
 
   return res.status(200).json({

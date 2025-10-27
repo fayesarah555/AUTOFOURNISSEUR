@@ -6,8 +6,9 @@ const {
   deleteProvider,
 } = require('../repositories/providerRepository');
 
-const DEFAULT_PAGE_SIZE = 10;
+const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 50;
+const PAGE_SIZE_OPTIONS = [10, 20, 30, 50];
 
 const sanitizeNumber = (value) => {
   if (value === undefined || value === null || value === '') {
@@ -235,8 +236,9 @@ const sortProviders = (items, sortBy, sortOrder) => {
   });
 };
 
-const listProviders = (req, res) => {
-  const {
+const listProviders = async (req, res, next) => {
+  try {
+    const {
     q,
     modes,
     coverage,
@@ -256,131 +258,143 @@ const listProviders = (req, res) => {
     pageSize = DEFAULT_PAGE_SIZE,
     weightKg,
     distanceKm,
-  } = req.query;
+    } = req.query;
 
-  const filters = {
-    query: typeof q === 'string' ? q.trim().toLowerCase() : '',
-    modes: parseCsv(modes).map((mode) => mode.toLowerCase()),
-    coverages: parseCsv(coverage).map((value) => value.toLowerCase()),
-    regions: parseCsv(regions).map((value) => value.toUpperCase()),
-    services: parseCsv(services).map((value) => value.toLowerCase()),
-    certifications: parseCsv(certifications).map((value) => value.toLowerCase()),
-    flexibilities: parseCsv(contractFlexibility).map((value) => value.toLowerCase()),
-    features: parseCsv(req.query.features).map((value) => value.toLowerCase()),
-    minRating: sanitizeNumber(minRating),
-    minOnTimeRate: sanitizeNumber(minOnTimeRate),
-    maxLeadTime: sanitizeNumber(maxLeadTime),
-    maxCo2: sanitizeNumber(maxCo2),
-    maxPrice: sanitizeNumber(maxPrice),
-    requireWeightMatch: requireWeightMatch === 'true',
-    deliveryDepartments: parseCsv(req.query.deliveryDepartments)
-      .map(normalizeDepartmentFilter)
-      .filter(Boolean),
-    pickupDepartments: parseCsv(req.query.pickupDepartments)
-      .map(normalizeDepartmentFilter)
-      .filter(Boolean),
-  };
-
-  const canonicalPageSize = Math.min(
-    Math.max(Number(pageSize) || DEFAULT_PAGE_SIZE, 1),
-    MAX_PAGE_SIZE
-  );
-  const currentPage = Math.max(Number(page) || 1, 1);
-
-  const dataset = repositoryListProviders();
-  const enriched = dataset.map((provider) =>
-    enrichProvider(provider, { distanceKm, weightKg })
-  );
-  const filtered = applyFilters(enriched, filters);
-
-  const availableDeliveryDepartments = Array.from(
-    new Set(
-      dataset
-        .flatMap((provider) => provider.profile?.deliveryDepartments || [])
+    const filters = {
+      query: typeof q === 'string' ? q.trim().toLowerCase() : '',
+      modes: parseCsv(modes).map((mode) => mode.toLowerCase()),
+      coverages: parseCsv(coverage).map((value) => value.toLowerCase()),
+      regions: parseCsv(regions).map((value) => value.toUpperCase()),
+      services: parseCsv(services).map((value) => value.toLowerCase()),
+      certifications: parseCsv(certifications).map((value) => value.toLowerCase()),
+      flexibilities: parseCsv(contractFlexibility).map((value) => value.toLowerCase()),
+      features: parseCsv(req.query.features).map((value) => value.toLowerCase()),
+      minRating: sanitizeNumber(minRating),
+      minOnTimeRate: sanitizeNumber(minOnTimeRate),
+      maxLeadTime: sanitizeNumber(maxLeadTime),
+      maxCo2: sanitizeNumber(maxCo2),
+      maxPrice: sanitizeNumber(maxPrice),
+      requireWeightMatch: requireWeightMatch === 'true',
+      deliveryDepartments: parseCsv(req.query.deliveryDepartments)
         .map(normalizeDepartmentFilter)
-        .filter(Boolean)
-    )
-  ).sort();
-  const availablePickupDepartments = Array.from(
-    new Set(
-      dataset
-        .flatMap((provider) => provider.profile?.pickupDepartments || [])
+        .filter(Boolean),
+      pickupDepartments: parseCsv(req.query.pickupDepartments)
         .map(normalizeDepartmentFilter)
-        .filter(Boolean)
-    )
-  ).sort();
-  const availableFeatures = Array.from(
-    new Set(
-      dataset.flatMap((provider) => provider.profile?.features || provider.serviceCapabilities || [])
-    )
-  ).sort();
+        .filter(Boolean),
+    };
 
-  const sortableFields = new Set([
-    'score',
-    'pricePerKm',
-    'estimatedCost',
-    'leadTimeDays',
-    'customerSatisfaction',
-    'onTimeRate',
-    'co2GramsPerTonneKm',
-    'baseHandlingFee',
-  ]);
+    const parsedPageSize = Number(pageSize);
+    const canonicalPageSize = PAGE_SIZE_OPTIONS.includes(parsedPageSize)
+      ? parsedPageSize
+      : DEFAULT_PAGE_SIZE;
+    const currentPage = Math.max(Number(page) || 1, 1);
 
-  const resolvedSortField = sortableFields.has(sortBy) ? sortBy : 'score';
-  const resolvedSortOrder = sortOrder === 'asc' ? 'asc' : 'desc';
+    const dataset = await repositoryListProviders();
+    const enriched = dataset.map((provider) =>
+      enrichProvider(provider, { distanceKm, weightKg })
+    );
+    const filtered = applyFilters(enriched, filters);
 
-  const sorted = sortProviders(filtered, resolvedSortField, resolvedSortOrder);
-  const total = sorted.length;
-  const totalPages = Math.max(Math.ceil(total / canonicalPageSize), 1);
-  const offset = (currentPage - 1) * canonicalPageSize;
-  const paginated = sorted.slice(offset, offset + canonicalPageSize);
+    const availableDeliveryDepartments = Array.from(
+      new Set(
+        dataset
+          .flatMap((provider) => provider.profile?.deliveryDepartments || [])
+          .map(normalizeDepartmentFilter)
+          .filter(Boolean)
+      )
+    ).sort();
+    const availablePickupDepartments = Array.from(
+      new Set(
+        dataset
+          .flatMap((provider) => provider.profile?.pickupDepartments || [])
+          .map(normalizeDepartmentFilter)
+          .filter(Boolean)
+      )
+    ).sort();
+    const availableFeatures = Array.from(
+      new Set(
+        dataset.flatMap((provider) => provider.profile?.features || provider.serviceCapabilities || [])
+      )
+    ).sort();
 
-  return res.json({
-    data: paginated,
-    meta: {
-      total,
-      page: currentPage,
-      pageSize: canonicalPageSize,
+    const sortableFields = new Set([
+      'score',
+      'pricePerKm',
+      'estimatedCost',
+      'leadTimeDays',
+      'customerSatisfaction',
+      'onTimeRate',
+      'co2GramsPerTonneKm',
+      'baseHandlingFee',
+    ]);
+
+    const resolvedSortField = sortableFields.has(sortBy) ? sortBy : 'score';
+    const resolvedSortOrder = sortOrder === 'asc' ? 'asc' : 'desc';
+
+    const sorted = sortProviders(filtered, resolvedSortField, resolvedSortOrder);
+    const total = sorted.length;
+    const totalPages = Math.max(Math.ceil(total / canonicalPageSize), 1);
+    const offset = (currentPage - 1) * canonicalPageSize;
+    const paginated = sorted.slice(offset, offset + canonicalPageSize);
+
+    return res.json({
+      data: paginated,
+      meta: {
+        total,
+        page: currentPage,
+        pageSize: canonicalPageSize,
       totalPages,
       sortBy: resolvedSortField,
       sortOrder: resolvedSortOrder,
+      pageSizeOptions: PAGE_SIZE_OPTIONS,
       appliedFilters: filters,
-      hasNextPage: currentPage < totalPages,
-      hasPreviousPage: currentPage > 1,
-      availableFilters: {
-        deliveryDepartments: availableDeliveryDepartments,
-        pickupDepartments: availablePickupDepartments,
-        features: availableFeatures,
+        hasNextPage: currentPage < totalPages,
+        hasPreviousPage: currentPage > 1,
+        availableFilters: {
+          deliveryDepartments: availableDeliveryDepartments,
+          pickupDepartments: availablePickupDepartments,
+          features: availableFeatures,
+        },
       },
-    },
-  });
+    });
+  } catch (error) {
+    return next(error);
+  }
 };
 
-const getProvidersByIds = (req, res) => {
-  const ids = parseCsv(req.query.ids);
-  if (ids.length === 0) {
-    return res.status(400).json({ error: 'Paramètre ids requis.' });
+const getProvidersByIds = async (req, res, next) => {
+  try {
+    const ids = parseCsv(req.query.ids);
+    if (ids.length === 0) {
+      return res.status(400).json({ error: 'Paramètre ids requis.' });
+    }
+
+    const providers = await Promise.all(ids.map((id) => findProviderById(id)));
+    const results = providers
+      .filter(Boolean)
+      .map((provider) => enrichProvider(provider, req.query));
+
+    if (results.length === 0) {
+      return res.status(404).json({ error: 'Aucun transporteur trouvé pour les identifiants demandés.' });
+    }
+
+    return res.json({ data: results });
+  } catch (error) {
+    return next(error);
   }
-
-  const results = ids
-    .map((id) => findProviderById(id))
-    .filter(Boolean)
-    .map((provider) => enrichProvider(provider, req.query));
-
-  if (results.length === 0) {
-    return res.status(404).json({ error: 'Aucun transporteur trouvé pour les identifiants demandés.' });
-  }
-
-  return res.json({ data: results });
 };
 
-const getProviderById = (req, res) => {
-  const provider = findProviderById(req.params.id);
-  if (!provider) {
-    return res.status(404).json({ error: 'Transporteur introuvable.' });
-  }
+const getProviderById = async (req, res, next) => {
+  try {
+    const provider = await findProviderById(req.params.id);
+    if (!provider) {
+      return res.status(404).json({ error: 'Transporteur introuvable.' });
+    }
 
-  return res.json({ data: enrichProvider(provider, req.query) });
+    return res.json({ data: enrichProvider(provider, req.query) });
+  } catch (error) {
+    return next(error);
+  }
 };
 
 const normalizeProviderPayload = (input, { partial = false } = {}) => {
@@ -495,41 +509,53 @@ const normalizeProviderPayload = (input, { partial = false } = {}) => {
   return { errors, value: normalized };
 };
 
-const createProvider = (req, res) => {
-  const { errors, value } = normalizeProviderPayload(req.body);
+const createProvider = async (req, res, next) => {
+  try {
+    const { errors, value } = normalizeProviderPayload(req.body);
 
-  if (errors.length > 0) {
-    return res.status(400).json({ error: errors.join(' ') });
+    if (errors.length > 0) {
+      return res.status(400).json({ error: errors.join(' ') });
+    }
+
+    const created = await addProvider(value);
+    return res.status(201).json({ data: enrichProvider(created) });
+  } catch (error) {
+    return next(error);
   }
-
-  const created = addProvider(value);
-  return res.status(201).json({ data: enrichProvider(created) });
 };
 
-const updateProviderEntry = (req, res) => {
-  const { errors, value } = normalizeProviderPayload(req.body, { partial: true });
+const updateProviderEntry = async (req, res, next) => {
+  try {
+    const { errors, value } = normalizeProviderPayload(req.body, { partial: true });
 
-  if (errors.length > 0) {
-    return res.status(400).json({ error: errors.join(' ') });
+    if (errors.length > 0) {
+      return res.status(400).json({ error: errors.join(' ') });
+    }
+
+    const updated = await updateProvider(req.params.id, value);
+
+    if (!updated) {
+      return res.status(404).json({ error: 'Transporteur introuvable.' });
+    }
+
+    return res.json({ data: enrichProvider(updated) });
+  } catch (error) {
+    return next(error);
   }
-
-  const updated = updateProvider(req.params.id, value);
-
-  if (!updated) {
-    return res.status(404).json({ error: 'Transporteur introuvable.' });
-  }
-
-  return res.json({ data: enrichProvider(updated) });
 };
 
-const deleteProviderEntry = (req, res) => {
-  const deleted = deleteProvider(req.params.id);
+const deleteProviderEntry = async (req, res, next) => {
+  try {
+    const deleted = await deleteProvider(req.params.id);
 
-  if (!deleted) {
-    return res.status(404).json({ error: 'Transporteur introuvable.' });
+    if (!deleted) {
+      return res.status(404).json({ error: 'Transporteur introuvable.' });
+    }
+
+    return res.status(204).send();
+  } catch (error) {
+    return next(error);
   }
-
-  return res.status(204).send();
 };
 
 module.exports = {
