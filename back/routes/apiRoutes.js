@@ -11,6 +11,8 @@ const {
   createProvider,
   updateProvider,
   deleteProvider,
+  getProviderTariffDocument,
+  getProviderBaseTariffGrid,
 } = require('../controllers/providerController');
 const { importExcelProviders } = require('../controllers/providerImportController');
 
@@ -28,6 +30,8 @@ const upload = multer({
 
 router.get('/providers', listProviders);
 router.get('/providers/batch', getProvidersByIds);
+router.get('/providers/:id/tariff-document', getProviderTariffDocument);
+router.get('/providers/:id/base-tariff-grid', getProviderBaseTariffGrid);
 router.get('/providers/:id', getProviderById);
 
 router.get('/me', requireAuth, getProfile);

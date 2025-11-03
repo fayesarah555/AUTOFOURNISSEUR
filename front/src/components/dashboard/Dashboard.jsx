@@ -7,7 +7,6 @@ const createEmptyFilters = () => ({
   q: '',
   modes: [],
   coverage: [],
-  regions: [],
   features: [],
   minRating: '',
   minOnTimeRate: '',
@@ -15,92 +14,13 @@ const createEmptyFilters = () => ({
   maxCo2: '',
   contractFlexibility: [],
   maxPrice: '',
+  palletCount: '',
   weightKg: '',
   distanceKm: '',
   requireWeightMatch: false,
   deliveryDepartments: [],
   pickupDepartments: [],
 });
-
-const SAVED_SEARCHES_KEY = 'autofournisseur.savedSearches';
-
-const cloneFilters = (filters) => {
-  const base = { ...createEmptyFilters(), ...(filters || {}) };
-  return {
-    ...base,
-    modes: [...(base.modes || [])],
-    coverage: [...(base.coverage || [])],
-    regions: [...(base.regions || [])],
-    features: [...(base.features || [])],
-    contractFlexibility: [...(base.contractFlexibility || [])],
-    deliveryDepartments: [...(base.deliveryDepartments || [])],
-    pickupDepartments: [...(base.pickupDepartments || [])],
-  };
-};
-
-const createSavedSearchId = () => {
-  if (typeof window !== 'undefined' && window.crypto?.randomUUID) {
-    return window.crypto.randomUUID();
-  }
-  return `search-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
-};
-
-const loadSavedSearches = () => {
-  try {
-    const raw = window.localStorage.getItem(SAVED_SEARCHES_KEY);
-    if (!raw) {
-      return [];
-    }
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-    return parsed
-      .map((item) => ({
-        id: typeof item.id === 'string' ? item.id : createSavedSearchId(),
-        name: typeof item.name === 'string' && item.name.trim() ? item.name.trim() : 'Recherche',
-        filters: cloneFilters(item.filters),
-        lastUsedAt: item.lastUsedAt || null,
-        estimationDeparture: typeof item.estimationDeparture === 'string' ? item.estimationDeparture : '',
-        estimationArrival: typeof item.estimationArrival === 'string' ? item.estimationArrival : '',
-      }))
-      .slice(0, 20);
-  } catch (error) {
-    console.warn('Failed to load saved searches from localStorage', error);
-    return [];
-  }
-};
-
-const persistSavedSearches = (searches) => {
-  try {
-    const payload = searches.map(({ id, name, filters, lastUsedAt, estimationDeparture, estimationArrival }) => ({
-      id,
-      name,
-      filters,
-      lastUsedAt,
-      estimationDeparture,
-      estimationArrival,
-    }));
-    window.localStorage.setItem(SAVED_SEARCHES_KEY, JSON.stringify(payload));
-  } catch (error) {
-    console.warn('Failed to persist saved searches', error);
-  }
-};
-
-const formatSavedSearchTimestamp = (value) => {
-  if (!value) {
-    return null;
-  }
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return null;
-  }
-  return date.toLocaleDateString('fr-FR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
-};
 
 const MODE_OPTIONS = [
   { value: 'road', label: 'Routier' },
@@ -110,34 +30,9 @@ const MODE_OPTIONS = [
   { value: 'river', label: 'Fluvial' },
 ];
 
-const COVERAGE_OPTIONS = [
-  { value: 'domestic', label: 'National' },
-  { value: 'regional', label: 'Régional' },
-  { value: 'europe', label: 'Europe' },
-  { value: 'global', label: 'Global' },
-];
+const POPULAR_DEPARTMENT_CODES = ['75', '77', '78', '91', '92', '93', '94', '95'];
 
-const REGION_OPTIONS = [
-  { value: 'FR', label: 'France' },
-  { value: 'DE', label: 'Allemagne' },
-  { value: 'BE', label: 'Belgique' },
-  { value: 'NL', label: 'Pays-Bas' },
-  { value: 'ES', label: 'Espagne' },
-  { value: 'NO', label: 'Norvège' },
-  { value: 'SE', label: 'Suède' },
-  { value: 'DK', label: 'Danemark' },
-  { value: 'AT', label: 'Autriche' },
-  { value: 'PL', label: 'Pologne' },
-  { value: 'CZ', label: 'Tchéquie' },
-  { value: 'IT', label: 'Italie' },
-  { value: 'UK', label: 'Royaume-Uni' },
-  { value: 'CH', label: 'Suisse' },
-  { value: 'EU', label: 'Europe (interrégion)' },
-  { value: 'NA', label: 'Amérique du Nord' },
-  { value: 'LATAM', label: 'Amérique latine' },
-  { value: 'APAC', label: 'Asie-Pacifique' },
-  { value: 'MEA', label: 'Afrique / Moyen-Orient' },
-];
+
 
 const FEATURE_LABELS = {
   'semi-tautliner': 'Semi tautliner',
@@ -395,8 +290,6 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
   const [appliedFilters, setAppliedFilters] = useState(createEmptyFilters());
   const [formState, setFormState] = useState(createEmptyFilters());
   const [filtersExpanded, setFiltersExpanded] = useState(true);
-  const [savedSearches, setSavedSearches] = useState(() => (typeof window === 'undefined' ? [] : loadSavedSearches()));
-  const [savePresetName, setSavePresetName] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [sortBy, setSortBy] = useState('score');
@@ -406,6 +299,20 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
   const [error, setError] = useState(null);
   const [estimationDeparture, setEstimationDeparture] = useState('');
   const [estimationArrival, setEstimationArrival] = useState('');
+  const [tariffModal, setTariffModal] = useState({
+    open: false,
+    provider: null,
+    url: null,
+    type: null,
+    error: null,
+  });
+  const [tariffGridModal, setTariffGridModal] = useState({
+    open: false,
+    loading: false,
+    error: null,
+    data: null,
+    provider: null,
+  });
 
   // Fonction pour mettre à jour les filtres
   const updateFormState = (key, value) => {
@@ -456,6 +363,21 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
     return Array.from(map.values()).sort((a, b) => a.value.localeCompare(b.value));
   }, [deliveryDepartmentOptions, pickupDepartmentOptions]);
 
+  const popularDepartmentOptions = useMemo(() => {
+    if (!departmentOptionsAll.length) {
+      return [];
+    }
+
+    return POPULAR_DEPARTMENT_CODES.map((code) =>
+      departmentOptionsAll.find((option) => option.value === code)
+    ).filter(Boolean);
+  }, [departmentOptionsAll]);
+
+  const otherDepartmentOptions = useMemo(
+    () => departmentOptionsAll.filter((option) => !POPULAR_DEPARTMENT_CODES.includes(option.value)),
+    [departmentOptionsAll]
+  );
+
   const appliedDistanceKm = useMemo(() => {
     const fromMeta = meta?.estimatedDistanceKm;
     if (typeof fromMeta === 'number' && Number.isFinite(fromMeta)) {
@@ -476,6 +398,42 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
     []
   );
 
+  const formatCurrencyValue = (value) => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      return '--';
+    }
+    return currencyFormatter.format(value);
+  };
+
+  const tariffGridData = tariffGridModal.data;
+  const tariffGridPaletteCounts = Array.isArray(tariffGridData?.paletteCounts)
+    ? tariffGridData.paletteCounts
+    : [];
+  const tariffGridRows = Array.isArray(tariffGridData?.rows) ? tariffGridData.rows : [];
+  const tariffGridMeta = tariffGridData?.meta || null;
+  const tariffGridZoneLabels = tariffGridMeta?.zones || {};
+  const hasTariffGridData = tariffGridRows.length > 0 && tariffGridPaletteCounts.length > 0;
+
+  const formattedDistanceLabel = useMemo(() => {
+    if (typeof appliedDistanceKm !== 'number' || Number.isNaN(appliedDistanceKm)) {
+      return null;
+    }
+
+    const minimumFractionDigits = appliedDistanceKm >= 100 ? 0 : 1;
+    return `${appliedDistanceKm.toLocaleString('fr-FR', {
+      minimumFractionDigits,
+      maximumFractionDigits: 1,
+    })} km`;
+  }, [appliedDistanceKm]);
+
+  const totalEstimateHeader = useMemo(() => {
+    if (!formattedDistanceLabel) {
+      return 'Tarif total estimé';
+    }
+
+    return `Tarif total estimé (${formattedDistanceLabel})`;
+  }, [formattedDistanceLabel]);
+
   const bestScore = useMemo(() => {
     let maxScore = null;
     providers.forEach((provider) => {
@@ -490,26 +448,27 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
     return maxScore;
   }, [providers]);
 
-  const sortedSavedSearches = useMemo(() => {
-    const entries = savedSearches.map((entry) => ({ ...entry }));
-    entries.sort((a, b) => {
-      const aTime = a.lastUsedAt || '';
-      const bTime = b.lastUsedAt || '';
-      if (aTime && bTime) {
-        return bTime.localeCompare(aTime);
-      }
-      if (aTime) {
-        return -1;
-      }
-      if (bTime) {
-        return 1;
-      }
-      return a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' });
-    });
-    return entries;
-  }, [savedSearches]);
+  const tariffViewerUrl = useMemo(() => {
+    if (!tariffModal.open || tariffModal.error || !tariffModal.url) {
+      return null;
+    }
+    if (tariffModal.type === 'local') {
+      const separator = tariffModal.url.includes('?') ? '&' : '?';
+      return `${tariffModal.url}${separator}inline=1`;
+    }
+    return tariffModal.url;
+  }, [tariffModal.open, tariffModal.error, tariffModal.url, tariffModal.type]);
 
-  const canSaveSearch = savePresetName.trim().length > 0;
+  const tariffDownloadUrl = useMemo(() => {
+    if (!tariffModal.open || tariffModal.error || !tariffModal.url) {
+      return null;
+    }
+    if (tariffModal.type === 'local') {
+      const separator = tariffModal.url.includes('?') ? '&' : '?';
+      return `${tariffModal.url}${separator}download=1`;
+    }
+    return tariffModal.url;
+  }, [tariffModal.open, tariffModal.error, tariffModal.url, tariffModal.type]);
 
   const handleApplyFilters = useCallback(() => {
     setAppliedFilters({ ...formState });
@@ -525,66 +484,282 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
     setEstimationArrival('');
   }, []);
 
-  const handleSaveCurrentSearch = useCallback(() => {
-    const trimmedName = savePresetName.trim();
-    if (!trimmedName) {
+  const handleOpenTariff = useCallback((provider) => {
+    if (!provider) {
       return;
     }
-    const snapshot = cloneFilters(formState);
-    const timestamp = new Date().toISOString();
-    const estimation = {
-      departure: estimationDeparture,
-      arrival: estimationArrival,
-    };
-    setSavedSearches((prev) => {
-      const withoutDuplicateName = prev.filter(
-        (item) => item.name.localeCompare(trimmedName, 'fr', { sensitivity: 'base' }) !== 0
-      );
-      return [
-        {
-          id: createSavedSearchId(),
-          name: trimmedName,
-          filters: snapshot,
-          lastUsedAt: timestamp,
-          estimationDeparture: estimation.departure,
-          estimationArrival: estimation.arrival,
-        },
-        ...withoutDuplicateName,
-      ].slice(0, 20);
+
+    if (!provider.hasTariffDocument) {
+      setTariffModal({
+        open: true,
+        provider,
+        url: null,
+        type: null,
+        error: "Aucune grille tarifaire disponible pour ce transporteur.",
+      });
+      return;
+    }
+
+    const baseUrl =
+      provider.tariffDocumentUrl && provider.tariffDocumentUrl.trim().length > 0
+        ? provider.tariffDocumentUrl
+        : `/api/providers/${provider.id}/tariff-document`;
+
+    setTariffModal({
+      open: true,
+      provider,
+      url: baseUrl,
+      type: provider.tariffDocumentType || 'local',
+      error: null,
     });
-    setSavePresetName('');
-    handleApplyFilters();
-    setFiltersExpanded(true);
-  }, [formState, handleApplyFilters, savePresetName, estimationDeparture, estimationArrival]);
-
-  const handleApplySavedSearch = useCallback((entry) => {
-    const snapshot = cloneFilters(entry.filters);
-    setFormState(snapshot);
-    setAppliedFilters(snapshot);
-    setPage(1);
-    setFiltersExpanded(true);
-    setEstimationDeparture(entry.estimationDeparture || '');
-    setEstimationArrival(entry.estimationArrival || '');
-    const timestamp = new Date().toISOString();
-    setSavedSearches((prev) =>
-      prev.map((item) =>
-        item.id === entry.id
-          ? { ...item, lastUsedAt: timestamp, estimationDeparture: entry.estimationDeparture || '', estimationArrival: entry.estimationArrival || '' }
-          : item
-      )
-    );
   }, []);
 
-  const handleDeleteSavedSearch = useCallback((id) => {
-    setSavedSearches((prev) => prev.filter((item) => item.id !== id));
+  const handleCloseTariff = useCallback(() => {
+    setTariffModal({
+      open: false,
+      provider: null,
+      url: null,
+      type: null,
+      error: null,
+    });
   }, []);
+  const handleOpenTariffGrid = useCallback(async (provider) => {
+    if (!provider) {
+      return;
+    }
+
+    setTariffGridModal({
+      open: true,
+      loading: true,
+      error: null,
+      data: null,
+      provider,
+    });
+
+    try {
+      const { data } = await apiClient.get(`/api/providers/${provider.id}/base-tariff-grid`);
+      setTariffGridModal({
+        open: true,
+        loading: false,
+        error: null,
+        data: data?.data || null,
+        provider,
+      });
+    } catch (err) {
+      console.error('Erreur lors du chargement de la grille tarifaire de base', err);
+      setTariffGridModal({
+        open: true,
+        loading: false,
+        error:
+          err?.response?.data?.error ||
+          'Impossible de charger la grille tarifaire. Reessayez plus tard.',
+        data: null,
+        provider,
+      });
+    }
+  }, []);
+
+  const handleCloseTariffGrid = useCallback(() => {
+    setTariffGridModal({
+      open: false,
+      loading: false,
+      error: null,
+      data: null,
+      provider: null,
+    });
+  }, []);
+
+  const handleExportTariffGridPdf = useCallback(
+    async (provider) => {
+      if (typeof window === 'undefined' || !provider) {
+        return;
+      }
+
+      try {
+        let gridData = null;
+        if (
+          tariffGridModal.open &&
+          tariffGridModal.provider?.id === provider.id &&
+          hasTariffGridData
+        ) {
+          gridData = tariffGridModal.data;
+        } else {
+          const { data } = await apiClient.get(`/api/providers/${provider.id}/base-tariff-grid`);
+          gridData = data?.data || null;
+        }
+
+        if (
+          !gridData ||
+          !Array.isArray(gridData.paletteCounts) ||
+          !gridData.paletteCounts.length ||
+          !Array.isArray(gridData.rows) ||
+          !gridData.rows.length
+        ) {
+          window.alert('Aucune grille tarifaire disponible pour ce transporteur.');
+          return;
+        }
+
+        const paletteCounts = gridData.paletteCounts;
+        const rows = gridData.rows;
+        const zoneLabels = gridData.meta?.zones || {};
+        const tariffTypeLabel =
+          gridData.type === 'idf' ? 'Tarifs Île-de-France' : 'Tarifs hors IDF';
+
+        const legendHtml =
+          gridData.type === 'non-idf' && Object.keys(zoneLabels).length
+            ? `
+              <div class="tariff-grid__meta">
+                <span>Zones couvertes :</span>
+                <ul class="tariff-grid__legend">
+                  ${Object.entries(zoneLabels)
+                    .map(([zoneKey, label]) => `<li><strong>${label}</strong></li>`)
+                    .join('')}
+                </ul>
+              </div>
+            `
+            : '';
+
+        const headerCells = [
+          gridData.type === 'non-idf' ? '<th>Zone</th>' : '',
+          `<th>${gridData.type === 'idf' ? 'Destination' : 'Distance'}</th>`,
+          ...paletteCounts.map(
+            (count) => `<th>${count} palette${count > 1 ? 's' : ''}</th>`
+          ),
+        ].join('');
+
+        const rowCells = rows
+          .map((row) => {
+            const zoneCell =
+              gridData.type === 'non-idf'
+                ? `<td>${zoneLabels[row.zone] || row.zone || '--'}</td>`
+                : '';
+            const distanceCell = `<td>${row.label || '--'}</td>`;
+            const valuesCells = paletteCounts
+              .map((_, index) => {
+                const raw = Array.isArray(row.values) ? row.values[index] : null;
+                const value = typeof raw === 'number' && Number.isFinite(raw) ? raw : null;
+                return `<td>${formatCurrencyValue(value)}</td>`;
+              })
+              .join('');
+            return `<tr>${zoneCell}${distanceCell}${valuesCells}</tr>`;
+          })
+          .join('');
+
+        const departureDepartment = gridData.meta?.departureDepartment;
+        const title = `Grille tarifaire ${provider.name || ''}`.trim() || 'Grille tarifaire';
+        const subtitle = departureDepartment ? `Départ : ${departureDepartment}` : '';
+        const gridHtml = `
+          <div class="tariff-grid printable">
+            <div class="tariff-grid__meta">
+              <span>${tariffTypeLabel}</span>
+            </div>
+            ${legendHtml}
+            <div class="tariff-grid__table-wrapper">
+              <table class="tariff-grid-table">
+                <thead>
+                  <tr>${headerCells}</tr>
+                </thead>
+                <tbody>
+                  ${rowCells}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+
+        const targetWindow = window.open('', '_blank', 'noopener,noreferrer,width=900,height=700');
+        if (!targetWindow) {
+          window.alert(
+            "Impossible d'ouvrir la fenêtre de téléchargement. Vérifiez votre bloqueur de pop-up."
+          );
+          return;
+        }
+
+        const printStyles = `
+          * { box-sizing: border-box; font-family: "Segoe UI", Arial, sans-serif; color: #0f172a; }
+          body { margin: 24px; background: #fff; }
+          h1 { font-size: 20px; margin: 0 0 8px; }
+          h2 { font-size: 14px; margin: 0 0 16px; color: #475569; }
+          .tariff-grid { display: block; }
+          .tariff-grid__meta { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; font-size: 12px; color: #475569; }
+          .tariff-grid__legend { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+          .tariff-grid__legend li { background: #e2e8f0; color: #1e293b; padding: 4px 10px; border-radius: 999px; font-size: 11px; }
+          .tariff-grid__table-wrapper { border: 1px solid #cbd5f5; border-radius: 8px; overflow: hidden; margin-top: 12px; }
+          .tariff-grid-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+          th, td { border: 1px solid #cbd5f5; padding: 10px; text-align: center; }
+          th { background: #e2e8f0; font-weight: 600; }
+          td:first-child, th:first-child, td:nth-child(2), th:nth-child(2) { text-align: left; }
+        `;
+
+        targetWindow.document.write(`
+          <!DOCTYPE html>
+          <html lang="fr">
+            <head>
+              <meta charset="utf-8" />
+              <title>${title}</title>
+              <style>${printStyles}</style>
+            </head>
+            <body>
+              <h1>${title}</h1>
+              ${subtitle ? `<h2>${subtitle}</h2>` : ''}
+              <div class="meta">
+                Exporté le ${new Date().toLocaleString('fr-FR')}
+              </div>
+              ${gridHtml}
+            </body>
+          </html>
+        `);
+        targetWindow.document.close();
+        targetWindow.focus();
+        targetWindow.print();
+      } catch (error) {
+        console.error("Erreur lors de l'export de la grille au format PDF", error);
+        window.alert('Impossible de générer le PDF pour ce transporteur.');
+      }
+    },
+    [
+      formatCurrencyValue,
+      hasTariffGridData,
+      tariffGridModal.data,
+      tariffGridModal.open,
+      tariffGridModal.provider,
+    ]
+  );
 
   useEffect(() => {
-    if (typeof window === 'undefined') {
+    if (!tariffModal.open && !tariffGridModal.open) {
       return;
     }
-    persistSavedSearches(savedSearches);
-  }, [savedSearches]);
+
+    const handleKeyDown = (event) => {
+      if (event.key !== 'Escape') {
+        return;
+      }
+      if (tariffModal.open) {
+        handleCloseTariff();
+      }
+      if (tariffGridModal.open) {
+        handleCloseTariffGrid();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [tariffModal.open, tariffGridModal.open, handleCloseTariff, handleCloseTariffGrid]);
+
+  useEffect(() => {
+    if (!tariffModal.open && !tariffGridModal.open) {
+      return;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [tariffModal.open, tariffGridModal.open]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -619,7 +794,6 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
 
       addListParam('modes', appliedFilters.modes);
       addListParam('coverage', appliedFilters.coverage);
-      addListParam('regions', appliedFilters.regions);
       addListParam('features', appliedFilters.features);
       addListParam('contractFlexibility', appliedFilters.contractFlexibility);
       addListParam('deliveryDepartments', appliedFilters.deliveryDepartments);
@@ -630,6 +804,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
       addNumberParam('maxLeadTime', appliedFilters.maxLeadTime);
       addNumberParam('maxCo2', appliedFilters.maxCo2);
       addNumberParam('maxPrice', appliedFilters.maxPrice);
+      addNumberParam('palletCount', appliedFilters.palletCount);
       addNumberParam('weightKg', appliedFilters.weightKg);
       addNumberParam('distanceKm', appliedFilters.distanceKm);
 
@@ -731,36 +906,25 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
             <div className="filters-row">
               <div className="filter-group">
                 <label>
-                  <span>Recherche</span>
-                  <input
-                    type="text"
-                    value={formState.q}
-                    placeholder="Nom, spécialité..."
-                    onChange={(e) => updateFormState('q', e.target.value)}
-                  />
-                </label>
-              </div>
-
-              <div className="filter-group">
-                <label>
-                  <span>Distance (km)</span>
-                  <input
-                    type="number"
-                    min="0"
-                    value={formState.distanceKm}
-                    onChange={(e) => updateFormState('distanceKm', e.target.value)}
-                  />
-                </label>
-              </div>
-
-              <div className="filter-group">
-                <label>
                   <span>Poids (kg)</span>
                   <input
                     type="number"
                     min="0"
                     value={formState.weightKg}
                     onChange={(e) => updateFormState('weightKg', e.target.value)}
+                  />
+                </label>
+              </div>
+              <div className="filter-group">
+                <label>
+                  <span>Nombre de palettes</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="33"
+                    step="1"
+                    value={formState.palletCount}
+                    onChange={(e) => updateFormState('palletCount', e.target.value)}
                   />
                 </label>
               </div>
@@ -784,20 +948,6 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                 options={MODE_OPTIONS}
                 selectedValues={formState.modes}
                 onChange={(values) => updateFormState('modes', values)}
-              />
-
-              <SearchableMultiSelect
-                label="Couverture"
-                options={COVERAGE_OPTIONS}
-                selectedValues={formState.coverage}
-                onChange={(values) => updateFormState('coverage', values)}
-              />
-
-              <SearchableMultiSelect
-                label="Régions desservies"
-                options={REGION_OPTIONS}
-                selectedValues={formState.regions}
-                onChange={(values) => updateFormState('regions', values)}
               />
 
               <SearchableMultiSelect
@@ -825,11 +975,24 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                     }}
                   >
                     <option value="">Sélectionner</option>
-                    {departmentOptionsAll.map((option) => (
-                      <option key={`depart-${option.value}`} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
+                    {popularDepartmentOptions.length > 0 && (
+                      <optgroup key="popular-departments" label="Départements les plus utilisés">
+                        {popularDepartmentOptions.map((option) => (
+                          <option key={`depart-${option.value}`} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {otherDepartmentOptions.length > 0 && (
+                      <optgroup key="other-departments" label="Tous les départements">
+                        {otherDepartmentOptions.map((option) => (
+                          <option key={`depart-${option.value}`} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
                   </select>
                 </label>
               </div>
@@ -844,11 +1007,24 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                     }}
                   >
                     <option value="">Sélectionner</option>
-                    {departmentOptionsAll.map((option) => (
-                      <option key={`arrivee-${option.value}`} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
+                    {popularDepartmentOptions.length > 0 && (
+                      <optgroup key="popular-arrival-departments" label="Départements les plus utilisés">
+                        {popularDepartmentOptions.map((option) => (
+                          <option key={`arrivee-${option.value}`} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {otherDepartmentOptions.length > 0 && (
+                      <optgroup key="other-arrival-departments" label="Tous les départements">
+                        {otherDepartmentOptions.map((option) => (
+                          <option key={`arrivee-${option.value}`} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
                   </select>
                 </label>
               </div>
@@ -862,77 +1038,18 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                 ) : (
                   <span>Saisissez une distance ou sélectionnez départ/arrivée</span>
                 )}
-                </div>
               </div>
-
-              <div className="saved-searches-panel">
-                <div className="saved-searches-save">
-                  <label>
-                    <span>Nom de la recherche</span>
-                    <input
-                      type="text"
-                      value={savePresetName}
-                      onChange={(e) => setSavePresetName(e.target.value)}
-                      placeholder="Ex : Paris vers Lyon"
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    className="btn-save-search"
-                    onClick={handleSaveCurrentSearch}
-                    disabled={!canSaveSearch}
-                  >
-                    Enregistrer
-                  </button>
-                </div>
-
-                {sortedSavedSearches.length > 0 && (
-                  <div className="saved-searches-list">
-                    <span className="saved-searches-title">Recherches enregistrÃ©es</span>
-                    <div className="saved-searches-chips">
-                      {sortedSavedSearches.map((search) => {
-                        const lastUsedLabel = formatSavedSearchTimestamp(search.lastUsedAt);
-                        return (
-                          <div key={search.id} className="saved-search-chip">
-                            <button
-                              type="button"
-                              className="saved-search-apply"
-                              onClick={() => handleApplySavedSearch(search)}
-                              title={lastUsedLabel ? `Dernier usage : ${lastUsedLabel}` : 'Appliquer cette recherche'}
-                            >
-                              <span className="saved-search-name">{search.name}</span>
-                              {(search.estimationDeparture || search.estimationArrival) && (
-                                <small className="saved-search-meta">
-                                  {search.estimationDeparture || '---'} â†’ {search.estimationArrival || '---'}
-                                </small>
-                              )}
-                            </button>
-                            <button
-                              type="button"
-                              className="saved-search-delete"
-                              onClick={() => handleDeleteSavedSearch(search.id)}
-                              aria-label={`Supprimer la recherche ${search.name}`}
-                            >
-                              &times;
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="filters-actions">
-                <button type="button" className="btn-apply" onClick={handleApplyFilters}>
-                  Appliquer les filtres
-                </button>
-                <button 
-                type="button" 
+            </div>
+            <div className="filters-actions">
+              <button type="button" className="btn-apply" onClick={handleApplyFilters}>
+                Appliquer les filtres
+              </button>
+              <button
+                type="button"
                 className="btn-reset"
                 onClick={handleResetFilters}
               >
-                Réinitialiser
+                Reinitialiser
               </button>
             </div>
           </div>
@@ -1009,12 +1126,17 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                   <thead>
                     <tr>
                       <th>Transporteur</th>
-                      <th>Score</th>
+                      <th>Département</th>
+                      <th>Contact</th>
+                      <th>Téléphone</th>
+                      <th>Distance estimée</th>
+                      <th>Tarif HA (grille)</th>
+                      <th>Tarif HA EUR/km</th>
+                      <th>{totalEstimateHeader}</th>
                       <th>Satisfaction</th>
                       <th>Délai</th>
-                      <th>Prix/km</th>
-                      <th>{appliedDistanceKm ? `Estimation (${appliedDistanceKm} km)` : 'Estimation'}</th>
-                      <th>CO₂</th>
+                      <th>CO2</th>
+                      <th>Grille tarif transporteur</th>
                       <th>Actions</th>
                     </tr>
                   </thead>
@@ -1026,30 +1148,177 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                         Number.isFinite(providerScore) &&
                         Math.abs(providerScore - bestScore) < 0.0001;
 
+                      const departmentRaw =
+                        provider.profile?.department ||
+                        provider.profile?.deliveryDepartments?.[0] ||
+                        provider.profile?.pickupDepartments?.[0] ||
+                        '';
+                      const departmentDisplay = departmentRaw ? departmentRaw.toString().toUpperCase() : '--';
+
+                      const contactDisplay = provider.profile?.contact?.trim() || '--';
+                      const phoneDisplay = provider.profile?.phone?.trim() || '--';
+
+                      const pricingInfo = provider.pricing || {};
+                      const hasTariffGrid =
+                        typeof pricingInfo.gridPrice === 'number' && Number.isFinite(Number(pricingInfo.gridPrice));
+                      const gridPriceValue = hasTariffGrid
+                        ? Number(pricingInfo.gridPrice)
+                        : Number(provider.baseHandlingFee);
+                      const gridPriceDisplay = Number.isFinite(gridPriceValue)
+                        ? currencyFormatter.format(gridPriceValue)
+                        : '--';
+
+                      const pricePerKmSource =
+                        pricingInfo.pricePerKm !== undefined && pricingInfo.pricePerKm !== null
+                          ? pricingInfo.pricePerKm
+                          : provider.pricePerKm;
+                      const pricePerKmValue = Number(pricePerKmSource);
+                      const pricePerKmDisplay = Number.isFinite(pricePerKmValue)
+                        ? `${pricePerKmValue.toLocaleString('fr-FR', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })} EUR / km`
+                        : '--';
+
+                      const estimatedCostValue =
+                        typeof provider.estimatedCost === 'number' && Number.isFinite(provider.estimatedCost)
+                          ? provider.estimatedCost
+                          : hasTariffGrid
+                          ? gridPriceValue
+                          : typeof appliedDistanceKm === 'number'
+                          ? (Number(provider.baseHandlingFee) || 0) +
+                            (Number(provider.pricePerKm) || 0) * appliedDistanceKm
+                          : null;
+                      const estimatedCostDisplay =
+                        typeof estimatedCostValue === 'number' && Number.isFinite(estimatedCostValue)
+                          ? currencyFormatter.format(estimatedCostValue)
+                          : '--';
+
+                      const palletCountValue = Number(pricingInfo.palletCount);
+                      const hasPalletCount = Number.isFinite(palletCountValue);
+                      const palletMplValue = Number(pricingInfo.palletMpl);
+                      const hasPalletMpl = Number.isFinite(palletMplValue);
+
+                      const sourceLabel = (() => {
+                        switch (pricingInfo.source) {
+                          case 'idf':
+                            return 'Tarif IDF';
+                          case 'non-idf-zc':
+                            return 'Hors IDF - Zone courte';
+                          case 'non-idf-zl':
+                            return 'Hors IDF - Zone longue';
+                          default:
+                            return null;
+                        }
+                      })();
+
+                      const referenceDistanceDisplay =
+                        typeof pricingInfo.referenceDistanceKm === 'number' &&
+                        Number.isFinite(pricingInfo.referenceDistanceKm)
+                          ? pricingInfo.referenceDistanceKm.toLocaleString('fr-FR') + ' km'
+                          : null;
+
+                      const surchargeLabel = (() => {
+                        const parts = [];
+                        if (Number.isFinite(Number(pricingInfo.departureSurcharge))) {
+                          parts.push(
+                            `Enlevement +${Number(pricingInfo.departureSurcharge).toLocaleString('fr-FR')} EUR`
+                          );
+                        }
+                        if (Number.isFinite(Number(pricingInfo.deliverySurcharge))) {
+                          parts.push(
+                            `Livraison +${Number(pricingInfo.deliverySurcharge).toLocaleString('fr-FR')} EUR`
+                          );
+                        }
+                        return parts.length ? parts.join(' - ') : null;
+                      })();
+                      const satisfactionValue = Number(provider.customerSatisfaction);
+                      const leadTimeValue = Number(provider.leadTimeDays);
+                      const co2Value = Number(provider.co2GramsPerTonneKm);
+
                       return (
                         <tr key={provider.id} className={isBest ? 'best-result' : undefined}>
-                        <td>
-                          <div className="provider-info">
-                            <strong>{provider.name}</strong>
-                            <small>{provider.profile?.city}</small>
-                          </div>
-                        </td>
-                        <td><strong>{provider.score?.toFixed(0) || '--'}</strong></td>
-                        <td>{provider.customerSatisfaction?.toFixed(1) || '--'} / 5</td>
-                        <td>{provider.leadTimeDays || '--'} j</td>
-                        <td>{provider.pricePerKm?.toFixed(2) || '--'} €</td>
-                        <td>
-                          {appliedDistanceKm
-                            ? currencyFormatter.format(
-                                (Number(provider.baseHandlingFee) || 0) +
-                                  (Number(provider.pricePerKm) || 0) * appliedDistanceKm
-                              )
-                            : '--'}
-                        </td>
-                        <td>{provider.co2GramsPerTonneKm || '--'} g/t.km</td>
-                        <td>
-                          <button className="btn-compare">Comparer</button>
-                        </td>
+                          <td>
+                            <div className="provider-info">
+                              <div className={`provider-name${provider.hasTariffDocument ? ' has-tariff' : ''}`}>
+                                <strong>{provider.name}</strong>
+                                {provider.hasTariffDocument && (
+                                  <span className="provider-name-badge" aria-hidden="true">
+                                    PDF
+                                  </span>
+                                )}
+                              </div>
+                              <small>{provider.profile?.city}</small>
+                            </div>
+                          </td>
+                          <td>{departmentDisplay}</td>
+                          <td>{contactDisplay}</td>
+                          <td>{phoneDisplay}</td>
+                          <td>{formattedDistanceLabel || '--'}</td>
+                          <td>
+                            {gridPriceDisplay}
+                            {hasTariffGrid && (
+                              <>
+                                {sourceLabel && (
+                                  <small className="pricing-detail">
+                                    {sourceLabel}
+                                    {referenceDistanceDisplay ? ` - ${referenceDistanceDisplay}` : ''}
+                                  </small>
+                                )}
+                                {hasPalletCount && (
+                                  <small className="pricing-detail">
+                                    {`${palletCountValue.toLocaleString('fr-FR')} palette${palletCountValue > 1 ? 's' : ''}${
+                                      hasPalletMpl
+                                        ? ` - ${palletMplValue.toLocaleString('fr-FR', {
+                                            minimumFractionDigits: 1,
+                                            maximumFractionDigits: 1,
+                                          })} MPL`
+                                        : ''
+                                    }`}
+                                  </small>
+                                )}
+                              </>
+                            )}
+                          </td>
+                          <td>
+                            {pricePerKmDisplay}
+                            {pricingInfo.departmentName && (
+                              <small className="pricing-detail">{pricingInfo.departmentName}</small>
+                            )}
+                            {surchargeLabel && (
+                              <small className="pricing-detail">{surchargeLabel}</small>
+                            )}
+                          </td>
+                          <td>{estimatedCostDisplay}</td>
+                          <td>
+                            {Number.isFinite(satisfactionValue)
+                              ? `${satisfactionValue.toFixed(1)} / 5`
+                              : '--'}
+                          </td>
+                          <td>{Number.isFinite(leadTimeValue) ? `${leadTimeValue} j` : '--'}</td>
+                          <td>{Number.isFinite(co2Value) ? `${co2Value} g/t.km` : '--'}</td>
+                          <td>
+                            <div className="tariff-actions">
+                              <button
+                                type="button"
+                                className="btn-grid"
+                                onClick={() => handleOpenTariffGrid(provider)}
+                              >
+                                Voir la grille
+                              </button>
+                              <button
+                                type="button"
+                                className="btn-tariff btn-tariff--pdf"
+                                onClick={() => handleExportTariffGridPdf(provider)}
+                                title="Exporter la grille en PDF"
+                              >
+                                📄 PDF
+                              </button>
+                            </div>
+                          </td>
+                          <td>
+                            <button className="btn-compare">Comparer</button>
+                          </td>
                         </tr>
                       );
                     })}
@@ -1081,8 +1350,170 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
           </div>
         </section>
       </main>
+
+      {tariffGridModal.open && (
+        <div className="tariff-modal-backdrop" role="dialog" aria-modal="true">
+          <div className="tariff-modal tariff-modal--grid">
+            <header className="tariff-modal__header">
+              <div className="tariff-modal__title">
+                <h3>Grille tarifaire de base</h3>
+                {tariffGridModal.provider?.name && (
+                  <small>{tariffGridModal.provider.name}</small>
+                )}
+                {tariffGridMeta?.departureDepartment && (
+                  <small>Depart: {tariffGridMeta.departureDepartment}</small>
+                )}
+              </div>
+              <button
+                type="button"
+                className="tariff-modal__close"
+                onClick={handleCloseTariffGrid}
+                aria-label="Fermer la grille tarifaire"
+              >
+                {'\u00d7'}
+              </button>
+            </header>
+            <div className="tariff-modal__body tariff-modal__body--grid">
+              {tariffGridModal.loading ? (
+                <p className="tariff-modal__message">Chargement de la grille tarifaire...</p>
+              ) : tariffGridModal.error ? (
+                <p className="tariff-modal__message">{tariffGridModal.error}</p>
+              ) : hasTariffGridData ? (
+                <div className="tariff-grid">
+                  <div className="tariff-grid__meta">
+                    <span>
+                      {tariffGridData?.type === 'idf' ? 'Tarifs Ile-de-France' : 'Tarifs hors IDF'}
+                    </span>
+                  </div>
+                  {tariffGridData?.type === 'non-idf' && Object.keys(tariffGridZoneLabels).length > 0 && (
+                    <div className="tariff-grid__meta">
+                      <span>Zones couvertes:</span>
+                      <ul className="tariff-grid__legend">
+                        {Object.entries(tariffGridZoneLabels).map(([zoneKey, zoneLabel]) => (
+                          <li key={zoneKey}>
+                            <strong>{zoneLabel}</strong>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  <div className="tariff-grid__table-wrapper">
+                    <table className="tariff-grid-table">
+                      <thead>
+                        <tr>
+                          {tariffGridData?.type === 'non-idf' && <th>Zone</th>}
+                          <th>{tariffGridData?.type === 'idf' ? 'Destination' : 'Distance'}</th>
+                          {tariffGridPaletteCounts.map((count) => (
+                            <th key={`palette-${count}`}>{count} palette{count > 1 ? 's' : ''}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tariffGridRows.map((row) => (
+                          <tr key={row.key || row.label}>
+                            {tariffGridData?.type === 'non-idf' && (
+                              <td>{tariffGridZoneLabels[row.zone] || row.zone || '--'}</td>
+                            )}
+                            <td>{row.label || '--'}</td>
+                            {tariffGridPaletteCounts.map((count, index) => (
+                              <td key={`${row.key || row.label || index}-${count}`}>
+                                {formatCurrencyValue(
+                                  Array.isArray(row.values) ? row.values[index] : null
+                                )}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : (
+                <p className="tariff-modal__message">
+                  Aucune grille tarifaire disponible pour ce transporteur.
+                </p>
+              )}
+            </div>
+            <footer className="tariff-modal__footer">
+              <button type="button" className="tariff-modal__btn" onClick={handleCloseTariffGrid}>
+                Fermer
+              </button>
+            </footer>
+          </div>
+        </div>
+      )}
+
+      {tariffModal.open && (
+        <div className="tariff-modal-backdrop" role="dialog" aria-modal="true">
+          <div className="tariff-modal">
+            <header className="tariff-modal__header">
+              <div className="tariff-modal__title">
+                <h3>{tariffModal.provider?.name || 'Grille tarifaire'}</h3>
+                {tariffModal.provider?.profile?.city && (
+                  <small>{tariffModal.provider.profile.city}</small>
+                )}
+              </div>
+              <button
+                type="button"
+                className="tariff-modal__close"
+                onClick={handleCloseTariff}
+                aria-label="Fermer la grille tarifaire"
+              >
+                {'\u00d7'}
+              </button>
+            </header>
+            <div className="tariff-modal__body">
+              {tariffModal.error ? (
+                <p className="tariff-modal__message">{tariffModal.error}</p>
+              ) : (
+                <>
+                  {tariffViewerUrl ? (
+                    <iframe
+                      key={tariffViewerUrl}
+                      src={tariffViewerUrl}
+                      title={`Grille tarifaire ${tariffModal.provider?.name || ''}`}
+                      className="tariff-modal__iframe"
+                    />
+                  ) : (
+                    <p className="tariff-modal__message">Chargement du document...</p>
+                  )}
+                  {tariffModal.type === 'remote' && !tariffModal.error && (
+                    <p className="tariff-modal__hint">
+                      Le document est hébergé sur un site externe. Utilisez le bouton d&apos;ouverture si l&apos;aperçu ne s&apos;affiche pas.
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+            <footer className="tariff-modal__footer">
+              <button type="button" className="tariff-modal__btn" onClick={handleCloseTariff}>
+                Fermer
+              </button>
+              {!tariffModal.error && tariffDownloadUrl && (
+                <a
+                  href={tariffDownloadUrl}
+                  target={tariffModal.type === 'remote' ? '_blank' : '_self'}
+                  rel="noopener noreferrer"
+                  className="tariff-modal__btn tariff-modal__btn--primary"
+                >
+                  {tariffModal.type === 'remote' ? 'Ouvrir dans un nouvel onglet' : 'Télécharger le PDF'}
+                </a>
+              )}
+            </footer>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
 export default Dashboard;
+
+
+
+
+
+
+
+
+

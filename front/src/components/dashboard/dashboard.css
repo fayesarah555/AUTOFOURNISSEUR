@@ -758,6 +758,112 @@ body {
   color: var(--color-muted);
 }
 
+.provider-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.provider-name strong {
+  color: var(--color-text);
+}
+
+.provider-name.has-tariff strong {
+  color: var(--color-accent);
+}
+
+.provider-name-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--color-border);
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.provider-name.has-tariff .provider-name-badge {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+.btn-tariff {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--color-accent);
+  background: var(--color-card);
+  color: var(--color-accent);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-tariff:hover {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+.btn-tariff--pdf {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-tariff:disabled {
+  background: var(--color-border);
+  border-color: var(--color-border);
+  color: var(--color-muted);
+  cursor: not-allowed;
+  opacity: 0.75;
+}
+
+.btn-tariff:disabled:hover {
+  background: var(--color-border);
+  color: var(--color-muted);
+}
+
+.btn-grid {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  background: var(--color-soft);
+  color: var(--color-text);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-grid:hover {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #fff;
+}
+
+.tariff-status {
+  font-size: 0.8125rem;
+  color: var(--color-muted);
+}
+
+.tariff-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pricing-detail {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.75rem;
+  color: var(--color-muted);
+}
+
 .btn-compare {
   padding: 6px 16px;
   background: var(--color-accent);
@@ -773,6 +879,217 @@ body {
 .btn-compare:hover {
   background: var(--color-accent-dark);
   transform: translateY(-1px);
+}
+
+/* Modal grille tarifaire */
+.tariff-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 20px;
+  z-index: 1200;
+}
+
+.tariff-modal {
+  width: min(920px, 100%);
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.25);
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.tariff-modal--grid {
+  width: min(1080px, 100%);
+}
+
+.tariff-modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--color-border);
+  gap: 16px;
+}
+
+.tariff-modal__title h3 {
+  margin: 0;
+  font-size: 1.125rem;
+}
+
+.tariff-modal__title small {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.8125rem;
+  color: var(--color-muted);
+}
+
+.tariff-modal__close {
+  border: none;
+  background: transparent;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--color-muted);
+  padding: 4px;
+}
+
+.tariff-modal__close:hover {
+  color: var(--color-accent);
+}
+
+.tariff-modal__body {
+  padding: 16px 24px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  overflow: hidden;
+}
+
+.tariff-modal__body--grid {
+  padding-bottom: 24px;
+  gap: 16px;
+  overflow: auto;
+}
+
+.tariff-modal__iframe {
+  border: none;
+  border-radius: 12px;
+  background: var(--color-soft);
+  width: 100%;
+  flex: 1;
+  min-height: 55vh;
+}
+
+.tariff-modal__message {
+  margin: 0;
+  padding: 24px;
+  background: var(--color-soft);
+  border-radius: 12px;
+  text-align: center;
+  font-size: 0.95rem;
+  color: var(--color-text);
+}
+
+.tariff-modal__hint {
+  font-size: 0.8125rem;
+  color: var(--color-muted);
+  background: var(--color-soft);
+  padding: 12px 16px;
+  border-radius: 10px;
+}
+
+.tariff-modal__footer {
+  padding: 16px 24px;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.tariff-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.tariff-grid__meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+  color: var(--color-muted);
+}
+
+.tariff-grid__legend {
+  display: flex;
+  gap: 8px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+  flex-wrap: wrap;
+}
+
+.tariff-grid__legend li {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--color-soft);
+  color: var(--color-text);
+  font-size: 0.8rem;
+}
+
+.tariff-grid__table-wrapper {
+  overflow: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.tariff-grid-table {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: collapse;
+}
+
+.tariff-grid-table th,
+.tariff-grid-table td {
+  padding: 12px 16px;
+  text-align: center;
+  font-size: 0.85rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.tariff-grid-table th {
+  background: var(--color-soft);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.tariff-grid-table th:first-child,
+.tariff-grid-table td:first-child,
+.tariff-grid-table th:nth-child(2),
+.tariff-grid-table td:nth-child(2) {
+  text-align: left;
+}
+
+.tariff-grid-table tbody tr:nth-child(even) {
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.tariff-modal__btn {
+  padding: 10px 18px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: #fff;
+  color: var(--color-text);
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-decoration: none;
+}
+
+.tariff-modal__btn:hover {
+  background: var(--color-soft);
+}
+
+.tariff-modal__btn--primary {
+  background: var(--color-accent);
+  color: #fff;
+  border-color: var(--color-accent);
+}
+
+.tariff-modal__btn--primary:hover {
+  background: var(--color-accent-dark);
+  border-color: var(--color-accent-dark);
 }
 
 /* État vide & erreurs */
@@ -840,6 +1157,18 @@ body {
   .providers-table td {
     padding: 12px;
   }
+
+  .tariff-modal__body--grid {
+    padding: 16px;
+  }
+
+  .tariff-grid__table-wrapper {
+    border-radius: 8px;
+  }
+
+  .tariff-grid-table {
+    min-width: 520px;
+  }
 }
 
 @media (max-width: 640px) {
@@ -858,5 +1187,33 @@ body {
 
   .providers-table {
     min-width: 700px;
+  }
+
+  .tariff-modal {
+    max-height: 92%;
+  }
+
+  .tariff-modal__body {
+    padding: 12px 16px 0;
+  }
+
+  .tariff-modal__footer {
+    padding: 12px 16px 16px;
+  }
+
+  .tariff-modal__iframe {
+    min-height: 50vh;
+  }
+
+  .tariff-modal--grid {
+    width: 100%;
+  }
+
+  .tariff-modal__body--grid {
+    padding: 12px 16px 16px;
+  }
+
+  .tariff-grid-table {
+    min-width: 460px;
   }
 }

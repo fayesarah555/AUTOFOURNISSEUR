@@ -6,6 +6,7 @@ const {
   serviceByFeature,
 } = require('../utils/providerMappings');
 const { importProviders } = require('../services/providerImportService');
+const { findTariffDocument } = require('../utils/tariffDocuments');
 
 const clone = (value) => (value ? JSON.parse(JSON.stringify(value)) : null);
 
@@ -254,6 +255,14 @@ const hydrateProviders = async (supplierRows) => {
       provider.profile.deliveryDepartments.push(provider.profile.department);
     }
 
+    const documentInfo = findTariffDocument(id, row.tariff_document_url);
+    provider.hasTariffDocument = documentInfo.hasDocument;
+    provider.tariffDocumentUrl = documentInfo.hasDocument ? documentInfo.publicUrl : null;
+    provider.tariffDocumentType = documentInfo.type || null;
+    if (documentInfo.hasDocument && documentInfo.filename) {
+      provider.tariffDocumentFilename = documentInfo.filename;
+    }
+
     return provider;
   });
 
@@ -274,6 +283,24 @@ const findProviderById = async (externalRef) => {
   const rows = await fetchSuppliers(externalRef);
   const providers = await hydrateProviders(rows);
   return clone(providers[0] || null);
+};
+
+const getTariffDocumentDefinition = async (externalRef) => {
+  if (!externalRef) {
+    return null;
+  }
+
+  const rows = await fetchSuppliers(externalRef);
+  if (!rows.length) {
+    return null;
+  }
+
+  const row = rows[0];
+  return {
+    supplierId: row.id,
+    externalRef: row.external_ref || externalRef,
+    explicitPath: row.tariff_document_url || '',
+  };
 };
 
 const ensureUniqueExternalRef = async (candidate, baseName) => {
@@ -306,6 +333,7 @@ const buildProviderForImport = (base = {}, overrides = {}) => {
     name: merged.name,
     description: merged.description || '',
     notes: merged.notes || '',
+    tariffDocumentUrl: merged.tariffDocumentUrl || '',
     coverage: merged.coverage || 'domestic',
     contractFlexibility: merged.contractFlexibility || 'spot',
     modes: Array.isArray(merged.modes) ? merged.modes : [],
@@ -382,6 +410,7 @@ const updateProvider = async (externalRef, updates) => {
       minShipmentKg: base.minShipmentKg,
       co2GramsPerTonneKm: base.co2GramsPerTonneKm,
       customerSatisfaction: base.customerSatisfaction,
+      tariffDocumentUrl: base.tariffDocumentUrl,
       profile: base.profile,
     },
     updates
@@ -405,6 +434,7 @@ const resetProviders = async () => {
 module.exports = {
   listProviders,
   findProviderById,
+  getTariffDocumentDefinition,
   addProvider,
   updateProvider,
   deleteProvider,

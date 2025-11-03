@@ -4,11 +4,14 @@ const {
   addProvider,
   updateProvider,
   deleteProvider,
+  getTariffDocumentDefinition,
 } = require('../repositories/providerRepository');
 const {
   computeDepartmentDistanceKm,
   normalizeDepartmentCode,
 } = require('../utils/departmentGeo');
+const { getTariffForShipment, MAX_PALLETS, getTariffGridForDeparture } = require('../services/tariffMatrixService');
+const { findTariffDocument } = require('../utils/tariffDocuments');
 
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 50;
@@ -20,6 +23,18 @@ const sanitizeNumber = (value) => {
   }
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
+};
+
+const sanitizePositiveInteger = (value) => {
+  const numeric = sanitizeNumber(value);
+  if (numeric === undefined) {
+    return undefined;
+  }
+  const int = Math.round(numeric);
+  if (int < 1) {
+    return undefined;
+  }
+  return Math.min(int, MAX_PALLETS);
 };
 
 const parseCsv = (value) => {
@@ -97,6 +112,67 @@ const enrichProvider = (provider, { distanceKm, weightKg } = {}) => {
   };
 };
 
+const applyTariffPricing = (
+  provider,
+  { departureDepartment, arrivalDepartment, palletCount, distanceKm } = {}
+) => {
+  const fallbackArrival =
+    arrivalDepartment ||
+    provider.profile?.deliveryDepartments?.[0] ||
+    provider.profile?.department ||
+    null;
+
+  const fallbackDeparture =
+    departureDepartment ||
+    provider.profile?.department ||
+    provider.profile?.pickupDepartments?.[0] ||
+    null;
+
+  const tariff = getTariffForShipment({
+    departureDepartment: fallbackDeparture,
+    arrivalDepartment: fallbackArrival,
+    palletCount,
+    distanceKm,
+  });
+
+  if (!tariff) {
+    return provider;
+  }
+
+  const next = { ...provider };
+  const hasGridPrice = Number.isFinite(tariff.gridPrice);
+  const hasTariffPricePerKm = Number.isFinite(tariff.pricePerKm);
+
+  const pricing = {
+    gridPrice: hasGridPrice ? tariff.gridPrice : null,
+    pricePerKm: hasTariffPricePerKm ? tariff.pricePerKm : provider.pricePerKm ?? null,
+    source: tariff.source ?? null,
+    zone: tariff.zone ?? null,
+    palletCount: tariff.palletCount ?? null,
+    palletMpl: tariff.palletMpl ?? null,
+    referenceDistanceKm: tariff.referenceDistanceKm ?? null,
+    baseCost: tariff.baseCost ?? null,
+    coefficient: tariff.coefficient ?? null,
+    departmentName: tariff.departmentName ?? null,
+    departureSurcharge: tariff.departureSurcharge ?? null,
+    deliverySurcharge: tariff.deliverySurcharge ?? null,
+    arrivalDepartment: tariff.arrivalDepartment ?? null,
+    departureDepartment: tariff.departureDepartment ?? null,
+    distanceKm: tariff.distanceKm ?? distanceKm ?? null,
+  };
+
+  if (hasGridPrice) {
+    next.estimatedCost = tariff.gridPrice;
+  }
+
+  if (hasTariffPricePerKm) {
+    next.pricePerKm = tariff.pricePerKm;
+  }
+
+  next.pricing = pricing;
+  return next;
+};
+
 const applyFilters = (items, filters) =>
   items.filter((item) => {
     if (filters.query) {
@@ -133,12 +209,6 @@ const applyFilters = (items, filters) =>
       return false;
     }
 
-    if (
-      filters.regions.length > 0 &&
-      !filters.regions.some((region) => item.regions.includes(region.toUpperCase()))
-    ) {
-      return false;
-    }
 
     if (
       filters.services.length > 0 &&
@@ -246,7 +316,6 @@ const listProviders = async (req, res, next) => {
       q,
       modes,
       coverage,
-      regions,
       services,
       certifications,
       minRating,
@@ -273,7 +342,6 @@ const listProviders = async (req, res, next) => {
       query: typeof q === 'string' ? q.trim().toLowerCase() : '',
       modes: parseCsv(modes).map((mode) => mode.toLowerCase()),
       coverages: parseCsv(coverage).map((value) => value.toLowerCase()),
-      regions: parseCsv(regions).map((value) => value.toUpperCase()),
       services: parseCsv(services).map((value) => value.toLowerCase()),
       certifications: parseCsv(certifications).map((value) => value.toLowerCase()),
       flexibilities: parseCsv(contractFlexibility).map((value) => value.toLowerCase()),
@@ -283,6 +351,7 @@ const listProviders = async (req, res, next) => {
       maxLeadTime: sanitizeNumber(maxLeadTime),
       maxCo2: sanitizeNumber(maxCo2),
       maxPrice: sanitizeNumber(maxPrice),
+      palletCount: sanitizePositiveInteger(req.query.palletCount),
       requireWeightMatch: requireWeightMatch === 'true',
       deliveryDepartments: parseCsv(req.query.deliveryDepartments)
         .map(normalizeDepartmentFilter)
@@ -326,7 +395,15 @@ const listProviders = async (req, res, next) => {
     const enriched = dataset.map((provider) =>
       enrichProvider(provider, { distanceKm: effectiveDistanceKm, weightKg })
     );
-    const filtered = applyFilters(enriched, filters);
+    const priced = enriched.map((provider) =>
+      applyTariffPricing(provider, {
+        departureDepartment: filters.departureDepartment,
+        arrivalDepartment: filters.arrivalDepartment,
+        palletCount: filters.palletCount,
+        distanceKm: effectiveDistanceKm,
+      })
+    );
+    const filtered = applyFilters(priced, filters);
 
     const availableDeliveryDepartments = Array.from(
       new Set(
@@ -404,7 +481,7 @@ const getProvidersByIds = async (req, res, next) => {
   try {
     const ids = parseCsv(req.query.ids);
     if (ids.length === 0) {
-      return res.status(400).json({ error: 'Paramètre ids requis.' });
+      return res.status(400).json({ error: 'ParamÃ¨tre ids requis.' });
     }
 
     const providers = await Promise.all(ids.map((id) => findProviderById(id)));
@@ -413,7 +490,7 @@ const getProvidersByIds = async (req, res, next) => {
       .map((provider) => enrichProvider(provider, req.query));
 
     if (results.length === 0) {
-      return res.status(404).json({ error: 'Aucun transporteur trouvé pour les identifiants demandés.' });
+      return res.status(404).json({ error: 'Aucun transporteur trouvÃ© pour les identifiants demandÃ©s.' });
     }
 
     return res.json({ data: results });
@@ -522,7 +599,7 @@ const normalizeProviderPayload = (input, { partial = false } = {}) => {
 
     const numeric = getNumber(data[field]);
     if (numeric === undefined) {
-      errors.push(`Le champ ${field} doit être un nombre.`);
+      errors.push(`Le champ ${field} doit Ãªtre un nombre.`);
       return;
     }
 
@@ -533,7 +610,7 @@ const normalizeProviderPayload = (input, { partial = false } = {}) => {
     }
 
     if (resolved < min || resolved > max) {
-      errors.push(`Le champ ${field} doit être compris entre ${min} et ${max}.`);
+      errors.push(`Le champ ${field} doit Ãªtre compris entre ${min} et ${max}.`);
       return;
     }
 
@@ -618,7 +695,7 @@ const normalizeProviderPayload = (input, { partial = false } = {}) => {
   }
 
   if (partial && Object.keys(normalized).length === 0) {
-    errors.push('Aucun champ valide à mettre à jour.');
+    errors.push('Aucun champ valide Ã  mettre Ã  jour.');
   }
 
   return { errors, value: normalized };
@@ -673,6 +750,92 @@ const deleteProviderEntry = async (req, res, next) => {
   }
 };
 
+const getProviderTariffDocument = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Identifiant fournisseur requis.' });
+    }
+
+    const meta = await getTariffDocumentDefinition(id);
+    if (!meta) {
+      return res.status(404).json({ error: 'Transporteur introuvable.' });
+    }
+
+    const documentInfo = findTariffDocument(meta.externalRef, meta.explicitPath);
+    if (!documentInfo.hasDocument) {
+      return res
+        .status(404)
+        .json({ error: 'Aucune grille tarifaire disponible pour ce transporteur.' });
+    }
+
+    if (documentInfo.type === 'remote') {
+      return res.redirect(documentInfo.publicUrl);
+    }
+
+    const dispositionType = req.query.download === '1' ? 'attachment' : 'inline';
+    const filename = documentInfo.filename || `${meta.externalRef}.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `${dispositionType}; filename="${encodeURIComponent(filename)}"`
+    );
+
+    return res.sendFile(documentInfo.localPath);
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const resolveDepartureDepartment = (provider) => {
+  const profile = provider?.profile || {};
+  return (
+    normalizeDepartmentFilter(
+      profile.department ||
+        profile.pickupDepartments?.[0] ||
+        profile.deliveryDepartments?.[0] ||
+        ''
+    ) || null
+  );
+};
+
+const getProviderBaseTariffGrid = async (req, res, next) => {
+  try {
+    const provider = await findProviderById(req.params.id);
+    if (!provider) {
+      return res.status(404).json({ error: 'Transporteur introuvable.' });
+    }
+
+    const departureDepartment = resolveDepartureDepartment(provider);
+    if (!departureDepartment) {
+      return res.status(400).json({
+        error: 'Impossible de déterminer le département de départ du transporteur.',
+      });
+    }
+
+    const grid = getTariffGridForDeparture(departureDepartment);
+    if (!grid) {
+      return res.status(404).json({
+        error: 'Aucune grille tarifaire de base disponible pour ce transporteur.',
+      });
+    }
+
+    return res.json({
+      data: {
+        ...grid,
+        provider: {
+          id: provider.id,
+          name: provider.name,
+          departureDepartment,
+        },
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 module.exports = {
   listProviders,
   getProvidersByIds,
@@ -680,4 +843,6 @@ module.exports = {
   createProvider,
   updateProvider: updateProviderEntry,
   deleteProvider: deleteProviderEntry,
+  getProviderTariffDocument,
+  getProviderBaseTariffGrid,
 };

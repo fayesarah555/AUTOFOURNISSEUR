@@ -86,6 +86,7 @@ CREATE TABLE IF NOT EXISTS suppliers (
   department_code VARCHAR(8),
   country_code    CHAR(2)      NOT NULL DEFAULT 'FR',
   website         VARCHAR(255),
+  tariff_document_url VARCHAR(255),
   status          ENUM('active','inactive','prospect')
                   NOT NULL DEFAULT 'active',
   coverage        ENUM('domestic','regional','europe','global')
