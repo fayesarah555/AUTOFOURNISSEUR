@@ -19,6 +19,8 @@ const FEATURE_OPTIONS = [
   { value: "fosse", label: "Fosse" },
   { value: "porte-char", label: "Porte-char" },
   { value: "convoi-exceptionnel", label: "Convoi exceptionnel" },
+  { value: "prise-rdv", label: "Prise de RDV" },
+  { value: "chgt-au-pont", label: "Chgt au Pont" },
 ];
 
 const DEFAULT_DEPARTMENTS = [

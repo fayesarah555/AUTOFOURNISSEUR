@@ -827,23 +827,7 @@ body {
   color: var(--color-muted);
 }
 
-.btn-grid {
-  padding: 6px 14px;
-  border-radius: 6px;
-  border: 1px solid var(--color-border);
-  background: var(--color-soft);
-  color: var(--color-text);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-}
 
-.btn-grid:hover {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  color: #fff;
-}
 
 .tariff-status {
   font-size: 0.8125rem;

@@ -10,12 +10,65 @@ const {
   computeDepartmentDistanceKm,
   normalizeDepartmentCode,
 } = require('../utils/departmentGeo');
-const { getTariffForShipment, MAX_PALLETS, getTariffGridForDeparture } = require('../services/tariffMatrixService');
+const {
+  getTariffForShipment,
+  MAX_PALLETS,
+  getTariffGridForDeparture,
+  getAvailablePaletteMeters,
+  getPalletCountForMeters,
+} = require('../services/tariffMatrixService');
 const { findTariffDocument } = require('../utils/tariffDocuments');
 
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 50;
 const PAGE_SIZE_OPTIONS = [10, 20, 30, 50];
+
+const SUPPLEMENTARY_OPTIONS = [
+  { value: 'hayon', label: 'Hayon' },
+  { value: 'prise-rdv', label: 'Prise de RDV' },
+  { value: 'matiere-adr', label: 'Matiere ADR' },
+  { value: 'chgt-au-pont', label: 'Chgt au Pont' },
+];
+
+const matchesSupplementaryOption = (option, provider, featureSet) => {
+  const features =
+    featureSet ||
+    new Set(
+      [...(provider.profile?.features || []), ...(provider.serviceCapabilities || [])]
+        .map((value) => value && value.toLowerCase())
+        .filter(Boolean)
+    );
+
+  const notes = `${provider.notes || ''} ${provider.profile?.notes || ''}`.toLowerCase();
+
+  switch (option) {
+    case 'hayon':
+      return (
+        features.has('porteur-hayon') ||
+        features.has('semi-hayon') ||
+        features.has('hayon')
+      );
+    case 'prise-rdv':
+      return (
+        features.has('prise-rdv') ||
+        features.has('prise-de-rdv') ||
+        notes.includes('prise de rdv') ||
+        notes.includes('prise rdv') ||
+        notes.includes('rdv')
+      );
+    case 'matiere-adr':
+      return features.has('adr');
+    case 'chgt-au-pont':
+      return (
+        features.has('chgt-au-pont') ||
+        features.has('chgt-pont') ||
+        features.has('chg-pont') ||
+        (notes.includes('pont') && (notes.includes('chgt') || notes.includes('changement')))
+      );
+    default:
+      return false;
+  }
+};
 
 const sanitizeNumber = (value) => {
   if (value === undefined || value === null || value === '') {
@@ -173,6 +226,60 @@ const applyTariffPricing = (
   return next;
 };
 
+const normalizeDepartmentList = (values) => {
+  if (!Array.isArray(values) || values.length === 0) {
+    return [];
+  }
+
+  const normalized = values
+    .map((value) => normalizeDepartmentFilter(value))
+    .filter(Boolean);
+
+  return Array.from(new Set(normalized));
+};
+
+const computeRoutePriority = (provider, { departureDepartment, arrivalDepartment }) => {
+  if (!departureDepartment && !arrivalDepartment) {
+    return 0;
+  }
+
+  const profile = provider?.profile || {};
+  const pricing = provider?.pricing || {};
+
+  const profileDepartment = normalizeDepartmentFilter(profile.department);
+  const pickupDepartments = normalizeDepartmentList(profile.pickupDepartments);
+  const deliveryDepartments = normalizeDepartmentList(profile.deliveryDepartments);
+
+  const pricingDeparture = normalizeDepartmentFilter(pricing.departureDepartment);
+  const pricingArrival = normalizeDepartmentFilter(pricing.arrivalDepartment);
+
+  let priority = 0;
+
+  if (departureDepartment) {
+    if (pricingDeparture === departureDepartment) {
+      priority += 8;
+    } else if (profileDepartment === departureDepartment) {
+      priority += 6;
+    } else if (pickupDepartments.includes(departureDepartment)) {
+      priority += 4;
+    } else if (deliveryDepartments.includes(departureDepartment)) {
+      priority += 2;
+    }
+  }
+
+  if (arrivalDepartment) {
+    if (pricingArrival === arrivalDepartment) {
+      priority += 4;
+    } else if (deliveryDepartments.includes(arrivalDepartment)) {
+      priority += 3;
+    } else if (pickupDepartments.includes(arrivalDepartment)) {
+      priority += 1;
+    }
+  }
+
+  return priority;
+};
+
 const applyFilters = (items, filters) =>
   items.filter((item) => {
     if (filters.query) {
@@ -197,13 +304,13 @@ const applyFilters = (items, filters) =>
       }
     }
 
-    if (filters.modes.length > 0) {
-      const modesLower = item.modes.map((mode) => mode.toLowerCase());
-      const hasMode = filters.modes.some((mode) => modesLower.includes(mode));
-      if (!hasMode) {
-        return false;
-      }
-    }
+    const combinedFeatureSet = new Set(
+      [...(item.profile?.features || []), ...(item.serviceCapabilities || [])]
+        .map((value) => (typeof value === 'string' ? value.toLowerCase() : ''))
+        .filter(Boolean)
+    );
+
+
 
     if (filters.coverages.length > 0 && !filters.coverages.includes(item.coverage.toLowerCase())) {
       return false;
@@ -266,9 +373,17 @@ const applyFilters = (items, filters) =>
     }
 
     if (filters.features.length > 0) {
-      const featureSet = new Set((item.profile?.features || []).map((value) => value.toLowerCase()));
-      const hasFeatures = filters.features.every((feature) => featureSet.has(feature));
+      const hasFeatures = filters.features.every((feature) => combinedFeatureSet.has(feature));
       if (!hasFeatures) {
+        return false;
+      }
+    }
+
+    if (filters.supplementaryOptions.length > 0) {
+      const matchesAllSupplementary = filters.supplementaryOptions.every((option) =>
+        matchesSupplementaryOption(option, item, combinedFeatureSet)
+      );
+      if (!matchesAllSupplementary) {
         return false;
       }
     }
@@ -289,21 +404,79 @@ const applyFilters = (items, filters) =>
       }
     }
 
+    if (filters.departureDepartment) {
+      const departureTargets = new Set(
+        [
+          item.profile?.department,
+          ...(item.profile?.pickupDepartments || []),
+          item.pricing?.departureDepartment,
+        ]
+          .filter(Boolean)
+          .map((value) => value.toString().toUpperCase())
+      );
+
+      if (!departureTargets.has(filters.departureDepartment)) {
+        return false;
+      }
+    }
+
+    if (filters.arrivalDepartment) {
+      const arrivalTargets = new Set(
+        [
+          ...(item.profile?.deliveryDepartments || []),
+          item.pricing?.arrivalDepartment,
+        ]
+          .filter(Boolean)
+          .map((value) => value.toString().toUpperCase())
+      );
+
+      if (!arrivalTargets.has(filters.arrivalDepartment)) {
+        return false;
+      }
+    }
+
+    if (typeof filters.palletMeters === 'number') {
+      const providerMeters = sanitizeNumber(item.pricing?.palletMpl);
+      if (typeof providerMeters !== 'number' || providerMeters < filters.palletMeters) {
+        return false;
+      }
+    }
+
     return true;
   });
 
 const sortProviders = (items, sortBy, sortOrder) => {
-  const orderMultiplier = sortOrder === 'asc' ? 1 : -1;
+  const orderMultiplier = sortOrder === 'desc' ? -1 : 1;
   return [...items].sort((a, b) => {
-    const aValue = a[sortBy];
-    const bValue = b[sortBy];
+    const aPriority = Number.isFinite(a.routePriority) ? a.routePriority : 0;
+    const bPriority = Number.isFinite(b.routePriority) ? b.routePriority : 0;
 
-    if (aValue === undefined || bValue === undefined) {
-      return 0;
+    if (aPriority !== bPriority) {
+      return bPriority - aPriority;
     }
 
+    const getComparableValue = (provider) => {
+      switch (sortBy) {
+        case 'estimatedCost': {
+          const value = Number(provider.estimatedCost);
+          return Number.isFinite(value) ? value : Number.MAX_VALUE;
+        }
+        case 'pricePerKm': {
+          const value = Number(provider.pricePerKm ?? provider.pricing?.pricePerKm);
+          return Number.isFinite(value) ? value : Number.MAX_VALUE;
+        }
+        default: {
+          const value = provider[sortBy];
+          return typeof value === 'number' && Number.isFinite(value) ? value : Number.MAX_VALUE;
+        }
+      }
+    };
+
+    const aValue = getComparableValue(a);
+    const bValue = getComparableValue(b);
+
     if (aValue === bValue) {
-      return 0;
+      return (a.name || '').localeCompare(b.name || '');
     }
 
     return aValue > bValue ? orderMultiplier : -orderMultiplier;
@@ -314,7 +487,6 @@ const listProviders = async (req, res, next) => {
   try {
     const {
       q,
-      modes,
       coverage,
       services,
       certifications,
@@ -325,33 +497,61 @@ const listProviders = async (req, res, next) => {
       contractFlexibility,
       requireWeightMatch,
       maxPrice,
-      sortBy = 'score',
-      sortOrder = 'desc',
+      sortBy = 'estimatedCost',
+      sortOrder = 'asc',
       page = 1,
       pageSize = DEFAULT_PAGE_SIZE,
       weightKg,
       distanceKm,
       departureDepartment,
       arrivalDepartment,
+      palletMeters,
     } = req.query;
 
     const normalizedDepartureDepartment = normalizeDepartmentFilter(departureDepartment);
     const normalizedArrivalDepartment = normalizeDepartmentFilter(arrivalDepartment);
+    const requestedPalletMeters = sanitizeNumber(palletMeters);
+    const requestedPalletCount = sanitizePositiveInteger(req.query.palletCount);
 
+    let effectivePalletCount =
+      typeof requestedPalletCount === 'number' ? requestedPalletCount : undefined;
+
+    if (
+      (effectivePalletCount === undefined || effectivePalletCount === null) &&
+      typeof requestedPalletMeters === 'number'
+    ) {
+      const derivedCount = getPalletCountForMeters(requestedPalletMeters);
+      if (Number.isFinite(derivedCount)) {
+        effectivePalletCount = derivedCount;
+      }
+    }
     const filters = {
       query: typeof q === 'string' ? q.trim().toLowerCase() : '',
-      modes: parseCsv(modes).map((mode) => mode.toLowerCase()),
       coverages: parseCsv(coverage).map((value) => value.toLowerCase()),
       services: parseCsv(services).map((value) => value.toLowerCase()),
       certifications: parseCsv(certifications).map((value) => value.toLowerCase()),
       flexibilities: parseCsv(contractFlexibility).map((value) => value.toLowerCase()),
       features: parseCsv(req.query.features).map((value) => value.toLowerCase()),
+      supplementaryOptions: Array.from(
+        new Set(
+          parseCsv(req.query.supplementaryOptions)
+            .map((value) => value.toLowerCase())
+            .filter((value) => SUPPLEMENTARY_OPTIONS.some((option) => option.value === value))
+        )
+      ),
       minRating: sanitizeNumber(minRating),
       minOnTimeRate: sanitizeNumber(minOnTimeRate),
       maxLeadTime: sanitizeNumber(maxLeadTime),
       maxCo2: sanitizeNumber(maxCo2),
       maxPrice: sanitizeNumber(maxPrice),
-      palletCount: sanitizePositiveInteger(req.query.palletCount),
+      palletCount:
+        typeof effectivePalletCount === 'number' && Number.isFinite(effectivePalletCount)
+          ? effectivePalletCount
+          : undefined,
+      palletMeters:
+        typeof requestedPalletMeters === 'number' && Number.isFinite(requestedPalletMeters)
+          ? Number(requestedPalletMeters.toFixed(3))
+          : null,
       requireWeightMatch: requireWeightMatch === 'true',
       deliveryDepartments: parseCsv(req.query.deliveryDepartments)
         .map(normalizeDepartmentFilter)
@@ -404,6 +604,13 @@ const listProviders = async (req, res, next) => {
       })
     );
     const filtered = applyFilters(priced, filters);
+    const prioritized = filtered.map((provider) => ({
+      ...provider,
+      routePriority: computeRoutePriority(provider, {
+        departureDepartment: normalizedDepartureDepartment,
+        arrivalDepartment: normalizedArrivalDepartment,
+      }),
+    }));
 
     const availableDeliveryDepartments = Array.from(
       new Set(
@@ -426,9 +633,9 @@ const listProviders = async (req, res, next) => {
         dataset.flatMap((provider) => provider.profile?.features || provider.serviceCapabilities || [])
       )
     ).sort();
+    const availablePalletMeters = getAvailablePaletteMeters();
 
     const sortableFields = new Set([
-      'score',
       'pricePerKm',
       'estimatedCost',
       'leadTimeDays',
@@ -438,14 +645,27 @@ const listProviders = async (req, res, next) => {
       'baseHandlingFee',
     ]);
 
-    const resolvedSortField = sortableFields.has(sortBy) ? sortBy : 'score';
+    const resolvedSortField = sortableFields.has(sortBy) ? sortBy : 'estimatedCost';
     const resolvedSortOrder = sortOrder === 'asc' ? 'asc' : 'desc';
 
-    const sorted = sortProviders(filtered, resolvedSortField, resolvedSortOrder);
+    const sorted = sortProviders(prioritized, resolvedSortField, resolvedSortOrder);
     const total = sorted.length;
     const totalPages = Math.max(Math.ceil(total / canonicalPageSize), 1);
     const offset = (currentPage - 1) * canonicalPageSize;
     const paginated = sorted.slice(offset, offset + canonicalPageSize);
+
+    const appliedFiltersPayload = {
+      ...filters,
+      palletCount:
+        typeof filters.palletCount === 'number' && Number.isFinite(filters.palletCount)
+          ? filters.palletCount
+          : null,
+      palletMeters:
+        typeof filters.palletMeters === 'number' && Number.isFinite(filters.palletMeters)
+          ? filters.palletMeters
+          : null,
+      supplementaryOptions: filters.supplementaryOptions,
+    };
 
     return res.json({
       data: paginated,
@@ -453,23 +673,26 @@ const listProviders = async (req, res, next) => {
         total,
         page: currentPage,
         pageSize: canonicalPageSize,
-      totalPages,
-      sortBy: resolvedSortField,
-      sortOrder: resolvedSortOrder,
-      pageSizeOptions: PAGE_SIZE_OPTIONS,
-      appliedFilters: filters,
-      estimatedDistanceKm:
-        typeof effectiveDistanceKm === 'number'
-          ? Math.round(effectiveDistanceKm * 10) / 10
-          : null,
-      estimatedDistanceSource: distanceSource,
+        totalPages,
+        sortBy: resolvedSortField,
+        sortOrder: resolvedSortOrder,
+        pageSizeOptions: PAGE_SIZE_OPTIONS,
+        appliedFilters: appliedFiltersPayload,
+        estimatedDistanceKm:
+          typeof effectiveDistanceKm === 'number'
+            ? Math.round(effectiveDistanceKm * 10) / 10
+            : null,
+        estimatedDistanceSource: distanceSource,
         hasNextPage: currentPage < totalPages,
         hasPreviousPage: currentPage > 1,
         availableFilters: {
           deliveryDepartments: availableDeliveryDepartments,
           pickupDepartments: availablePickupDepartments,
           features: availableFeatures,
+          palletMeters: availablePalletMeters,
+          supplementaryOptions: SUPPLEMENTARY_OPTIONS,
         },
+        derivedPalletCount: appliedFiltersPayload.palletCount,
       },
     });
   } catch (error) {
@@ -481,7 +704,7 @@ const getProvidersByIds = async (req, res, next) => {
   try {
     const ids = parseCsv(req.query.ids);
     if (ids.length === 0) {
-      return res.status(400).json({ error: 'ParamÃ¨tre ids requis.' });
+      return res.status(400).json({ error: 'ParamÃƒÂ¨tre ids requis.' });
     }
 
     const providers = await Promise.all(ids.map((id) => findProviderById(id)));
@@ -490,7 +713,7 @@ const getProvidersByIds = async (req, res, next) => {
       .map((provider) => enrichProvider(provider, req.query));
 
     if (results.length === 0) {
-      return res.status(404).json({ error: 'Aucun transporteur trouvÃ© pour les identifiants demandÃ©s.' });
+      return res.status(404).json({ error: 'Aucun transporteur trouvÃƒÂ© pour les identifiants demandÃƒÂ©s.' });
     }
 
     return res.json({ data: results });
@@ -599,7 +822,7 @@ const normalizeProviderPayload = (input, { partial = false } = {}) => {
 
     const numeric = getNumber(data[field]);
     if (numeric === undefined) {
-      errors.push(`Le champ ${field} doit Ãªtre un nombre.`);
+      errors.push(`Le champ ${field} doit ÃƒÂªtre un nombre.`);
       return;
     }
 
@@ -610,7 +833,7 @@ const normalizeProviderPayload = (input, { partial = false } = {}) => {
     }
 
     if (resolved < min || resolved > max) {
-      errors.push(`Le champ ${field} doit Ãªtre compris entre ${min} et ${max}.`);
+      errors.push(`Le champ ${field} doit ÃƒÂªtre compris entre ${min} et ${max}.`);
       return;
     }
 
@@ -626,7 +849,6 @@ const normalizeProviderPayload = (input, { partial = false } = {}) => {
   assignString('contractFlexibility', { required: false, transform: (value) => value.toLowerCase() });
   assignString('notes', { required: false });
 
-  assignArray('modes', { transform: (value) => value.toLowerCase() });
   assignArray('regions', { transform: (value) => value.toUpperCase() });
   assignArray('serviceCapabilities', { transform: (value) => value.toLowerCase() });
   assignArray('certifications');
@@ -638,10 +860,6 @@ const normalizeProviderPayload = (input, { partial = false } = {}) => {
   assignNumber('minShipmentKg', { min: 0 });
   assignNumber('co2GramsPerTonneKm', { min: 0 });
   assignNumber('customerSatisfaction', { min: 0, max: 5 });
-
-  if (data.modes === undefined && !partial) {
-    normalized.modes = ['road'];
-  }
 
   const profileInput = data.profile || {};
   if (data.profile !== undefined || !partial) {
@@ -695,7 +913,7 @@ const normalizeProviderPayload = (input, { partial = false } = {}) => {
   }
 
   if (partial && Object.keys(normalized).length === 0) {
-    errors.push('Aucun champ valide Ã  mettre Ã  jour.');
+    errors.push('Aucun champ valide ÃƒÂ  mettre ÃƒÂ  jour.');
   }
 
   return { errors, value: normalized };
@@ -810,7 +1028,7 @@ const getProviderBaseTariffGrid = async (req, res, next) => {
     const departureDepartment = resolveDepartureDepartment(provider);
     if (!departureDepartment) {
       return res.status(400).json({
-        error: 'Impossible de déterminer le département de départ du transporteur.',
+        error: 'Impossible de dÃ©terminer le dÃ©partement de dÃ©part du transporteur.',
       });
     }
 
@@ -846,3 +1064,6 @@ module.exports = {
   getProviderTariffDocument,
   getProviderBaseTariffGrid,
 };
+
+
+

@@ -22,6 +22,12 @@ const SHEET_NAMES = {
   ],
   nonIdfShort: ['Hors IDF ZC', 'Hors IDF ZC '],
   nonIdfLong: ['Hors IDF ZL', 'Hors IDF ZL '],
+  equivalence: [
+    'Equivalence Mpl Palette',
+    'Equivalence MPL Palette',
+    'equivalence mpl palette',
+    'Equivalence Mpl Palettes',
+  ],
 };
 
 const IDF_DEPARTURE_CODES = new Set(['75', '77', '78', '91', '92', '93', '94', '95']);
@@ -68,6 +74,89 @@ const ensureWorkbook = () => {
 const safeNumber = (value) => {
   const num = Number(value);
   return Number.isFinite(num) ? num : null;
+};
+
+const normalizeMeterValue = (value) => {
+  const num = safeNumber(value);
+  if (num === null || num <= 0) {
+    return null;
+  }
+  return Number(Number(num).toFixed(3));
+};
+
+const buildEquivalenceData = (sheet) => {
+  if (!sheet) {
+    return { meters: [], meterToCount: new Map() };
+  }
+
+  const rows = xlsx.utils.sheet_to_json(sheet, { header: 1, raw: true });
+  if (rows.length < 3) {
+    return { meters: [], meterToCount: new Map() };
+  }
+
+  const meterKeys = new Set();
+  const meterToCount = new Map();
+
+  const register = (meter, count, priority) => {
+    if (!Number.isFinite(meter) || !Number.isFinite(count)) {
+      return;
+    }
+    const key = Number(meter.toFixed(3));
+    const palletCount = normalizePalletCount(count);
+    if (!palletCount) {
+      return;
+    }
+    meterKeys.add(key);
+    const existing = meterToCount.get(key);
+    if (
+      !existing ||
+      priority < existing.priority ||
+      (priority === existing.priority && palletCount > existing.count)
+    ) {
+      meterToCount.set(key, { count: palletCount, priority });
+    }
+  };
+
+  const headerRowIndex = rows.length > 2 ? 2 : 0;
+  const headerRow = rows[headerRowIndex] || [];
+
+  for (let columnIndex = 0; columnIndex < headerRow.length; columnIndex += 1) {
+    const metreHeader = headerRow[columnIndex];
+    const nombreHeader = headerRow[columnIndex + 2];
+    const dimensionHeader = rows[headerRowIndex - 1]?.[columnIndex];
+    const normalizedPriority =
+      typeof dimensionHeader === 'string' && dimensionHeader.trim().toLowerCase().includes('80x120')
+        ? 0
+        : 1;
+    if (
+      typeof metreHeader !== 'string' ||
+      typeof nombreHeader !== 'string' ||
+      !metreHeader.trim().toLowerCase().startsWith('metre') ||
+      !nombreHeader.trim().toLowerCase().startsWith('nombre')
+    ) {
+      continue;
+    }
+
+    for (let rowIndex = headerRowIndex + 1; rowIndex < rows.length; rowIndex += 1) {
+      const metreValue = normalizeMeterValue(rows[rowIndex]?.[columnIndex]);
+      const nombreValue = safeNumber(rows[rowIndex]?.[columnIndex + 2]);
+      if (metreValue === null || nombreValue === null) {
+        continue;
+      }
+      register(metreValue, nombreValue, normalizedPriority);
+    }
+  }
+
+  const meters = Array.from(meterKeys)
+    .filter((value) => Number.isFinite(value) && value > 0)
+    .sort((a, b) => a - b);
+
+  const normalizedMap = new Map();
+  meterToCount.forEach((value, key) => {
+    normalizedMap.set(key, value.count);
+  });
+
+  return { meters, meterToCount: normalizedMap };
 };
 
 const buildPaletteColumnMap = (headerRow, startIndex = 1) => {
@@ -312,6 +401,8 @@ const loadTariffData = () => {
       pricePerKm: new Map(),
       nonIdfShort: [],
       nonIdfLong: [],
+      paletteMeters: [],
+      meterToPalletCount: new Map(),
     };
     return cache;
   }
@@ -320,11 +411,13 @@ const loadTariffData = () => {
   const kmSheet = resolveSheet(workbook, SHEET_NAMES.pricePerKm);
   const shortSheet = resolveSheet(workbook, SHEET_NAMES.nonIdfShort);
   const longSheet = resolveSheet(workbook, SHEET_NAMES.nonIdfLong);
+  const equivalenceSheet = resolveSheet(workbook, SHEET_NAMES.equivalence);
 
   const { matrix, mplByCount, departures } = buildIdfMatrix(idfSheet);
   const pricePerKm = buildPricePerKmMap(kmSheet);
   const nonIdfShort = buildNonIdfMatrix(shortSheet);
   const nonIdfLong = buildNonIdfMatrix(longSheet);
+  const equivalenceData = buildEquivalenceData(equivalenceSheet);
 
   cache = {
     idfDepartures: departures,
@@ -333,6 +426,8 @@ const loadTariffData = () => {
     pricePerKm,
     nonIdfShort,
     nonIdfLong,
+    paletteMeters: equivalenceData.meters,
+    meterToPalletCount: equivalenceData.meterToCount,
   };
 
   return cache;
@@ -558,4 +653,20 @@ module.exports = {
   loadTariffData,
   MAX_PALLETS,
   getTariffGridForDeparture,
+  getAvailablePaletteMeters: () => {
+    const data = loadTariffData();
+    const meters = data.paletteMeters || [];
+    return meters.map((meter) => ({
+      meter,
+      palletCount: data.meterToPalletCount.get(meter) ?? null,
+    }));
+  },
+  getPalletCountForMeters: (meter) => {
+    const data = loadTariffData();
+    if (!Number.isFinite(Number(meter))) {
+      return null;
+    }
+    const key = Number(Number(meter).toFixed(3));
+    return data.meterToPalletCount.get(key) ?? null;
+  },
 };

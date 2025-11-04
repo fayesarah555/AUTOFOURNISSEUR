@@ -5,7 +5,6 @@ import apiClient from '../../utils/apiClient';
 
 const createEmptyFilters = () => ({
   q: '',
-  modes: [],
   coverage: [],
   features: [],
   minRating: '',
@@ -15,20 +14,14 @@ const createEmptyFilters = () => ({
   contractFlexibility: [],
   maxPrice: '',
   palletCount: '',
+  palletMeters: '',
+  supplementaryOptions: [],
   weightKg: '',
   distanceKm: '',
   requireWeightMatch: false,
   deliveryDepartments: [],
   pickupDepartments: [],
 });
-
-const MODE_OPTIONS = [
-  { value: 'road', label: 'Routier' },
-  { value: 'rail', label: 'Rail' },
-  { value: 'sea', label: 'Maritime' },
-  { value: 'air', label: 'Aérien' },
-  { value: 'river', label: 'Fluvial' },
-];
 
 const POPULAR_DEPARTMENT_CODES = ['75', '77', '78', '91', '92', '93', '94', '95'];
 
@@ -39,18 +32,21 @@ const FEATURE_LABELS = {
   'semi-fourgon': 'Semi fourgon',
   'semi-frigorifique': 'Semi frigorifique',
   'semi-hayon': 'Semi hayon',
-  'porteur-tole': 'Porteur tôlé',
+  'porteur-tole': 'Porteur tÃ´lÃ©',
   'porteur-taut': 'Porteur tautliner',
   'porteur-hayon': 'Porteur hayon',
-  'vehicule-leger': 'Véhicule léger',
+  'vehicule-leger': 'VÃ©hicule lÃ©ger',
   express: 'Express',
   adr: 'ADR',
   international: 'International',
   grue: 'Grue',
-  'chariot-embarque': 'Chariot embarqué',
+  'chariot-embarque': 'Chariot embarquÃ©',
   fosse: 'Fosse',
   'porte-char': 'Porte-char',
   'convoi-exceptionnel': 'Convoi exceptionnel',
+  'prise-rdv': 'Prise de RDV',
+  'chgt-au-pont': 'Chgt au Pont',
+  'matiere-adr': 'Matiere ADR',
 };
 
 const FEATURE_GROUP_DEFINITIONS = [
@@ -67,8 +63,8 @@ const FEATURE_GROUP_DEFINITIONS = [
     keys: ['grue', 'chariot-embarque', 'fosse'],
   },
   {
-    label: 'Options & spécialités',
-    keys: ['express', 'adr', 'porte-char', 'convoi-exceptionnel', 'international'],
+    label: 'Options & spÃ©cialitÃ©s',
+    keys: ['express', 'adr', 'porte-char', 'convoi-exceptionnel', 'international', 'prise-rdv', 'chgt-au-pont'],
   },
 ];
 
@@ -78,6 +74,15 @@ const FLEXIBILITY_OPTIONS = [
   { value: 'quarterly', label: 'Trimestriel' },
   { value: 'annual', label: 'Annuel' },
 ];
+
+const SUPPLEMENTARY_OPTIONS = [
+  { value: 'hayon', label: 'Hayon' },
+  { value: 'prise-rdv', label: 'Prise de RDV' },
+  { value: 'matiere-adr', label: 'Matiere ADR' },
+  { value: 'chgt-au-pont', label: 'Chgt au Pont' },
+];
+
+
 
 const FRENCH_DEPARTMENT_NAMES = {
   '01': 'Ain',
@@ -228,10 +233,10 @@ const SearchableMultiSelect = ({ label, options, selectedValues, onChange, place
         <span className="select-label">{label}</span>
         <span className="select-value">
           {selectedValues.length > 0
-            ? `${selectedValues.length} sélectionné(s)`
+            ? `${selectedValues.length} sÃ©lectionnÃ©(s)`
             : placeholder || (isDisabled ? 'Indisponible' : 'Tous')}
         </span>
-        <span className={`select-arrow ${isOpen ? 'open' : ''}`}>▼</span>
+        <span className={`select-arrow ${isOpen ? 'open' : ''}`}>â–¼</span>
       </button>
 
       {isOpen && !isDisabled && (
@@ -247,7 +252,7 @@ const SearchableMultiSelect = ({ label, options, selectedValues, onChange, place
           </div>
           <div className="select-options">
             {filteredOptions.length === 0 ? (
-              <div className="select-no-results">Aucun résultat</div>
+              <div className="select-no-results">Aucun rÃ©sultat</div>
             ) : (
               filteredOptions.map((option) => (
                 <label key={option.value} className="select-option">
@@ -278,8 +283,8 @@ const SearchableMultiSelect = ({ label, options, selectedValues, onChange, place
   );
 };
 
-// Note: Le reste du code du Dashboard original doit être copié ici
-// Je vais créer une version simplifiée qui montre les changements principaux
+// Note: Le reste du code du Dashboard original doit Ãªtre copiÃ© ici
+// Je vais crÃ©er une version simplifiÃ©e qui montre les changements principaux
 
 const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
   const isAuthenticated = Boolean(user);
@@ -292,8 +297,8 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
   const [filtersExpanded, setFiltersExpanded] = useState(true);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
-  const [sortBy, setSortBy] = useState('score');
-  const [sortOrder, setSortOrder] = useState('desc');
+  const [sortBy, setSortBy] = useState('estimatedCost');
+  const [sortOrder, setSortOrder] = useState('asc');
   const [meta, setMeta] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -314,7 +319,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
     provider: null,
   });
 
-  // Fonction pour mettre à jour les filtres
+  // Fonction pour mettre Ã  jour les filtres
   const updateFormState = (key, value) => {
     setFormState(prev => ({ ...prev, [key]: value }));
   };
@@ -325,8 +330,8 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
       return;
     }
 
-    // TODO: ouvrir le module de création de fournisseur
-    console.info('Ouverture du module de création de fournisseur (à implémenter)');
+    // TODO: ouvrir le module de crÃ©ation de fournisseur
+    console.info('Ouverture du module de crÃ©ation de fournisseur (Ã  implÃ©menter)');
   }, [isAuthenticated, onLoginRequest]);
 
   const effectivePageSizeOptions = useMemo(() => {
@@ -341,7 +346,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
     const codes = meta?.availableFilters?.deliveryDepartments || [];
     return codes.map((code) => ({
       value: code,
-      label: `${code} - ${FRENCH_DEPARTMENT_NAMES[code] || 'Département ' + code}`,
+      label: `${code} - ${FRENCH_DEPARTMENT_NAMES[code] || 'DÃ©partement ' + code}`,
     }));
   }, [meta]);
 
@@ -349,7 +354,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
     const codes = meta?.availableFilters?.pickupDepartments || [];
     return codes.map((code) => ({
       value: code,
-      label: `${code} - ${FRENCH_DEPARTMENT_NAMES[code] || 'Département ' + code}`,
+      label: `${code} - ${FRENCH_DEPARTMENT_NAMES[code] || 'DÃ©partement ' + code}`,
     }));
   }, [meta]);
 
@@ -376,6 +381,41 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
   const otherDepartmentOptions = useMemo(
     () => departmentOptionsAll.filter((option) => !POPULAR_DEPARTMENT_CODES.includes(option.value)),
     [departmentOptionsAll]
+  );
+
+  const palletMeterOptions = useMemo(() => {
+    const entries = meta?.availableFilters?.palletMeters || [];
+    return entries
+      .map((entry) => {
+        const meterValue =
+          typeof entry === 'number'
+            ? entry
+            : Number(entry?.meter ?? entry?.value ?? entry);
+        const palletCountValue =
+          typeof entry === 'object' && entry !== null
+            ? Number(entry.palletCount ?? entry.count ?? entry.nombre)
+            : Number.NaN;
+
+        if (!Number.isFinite(meterValue) || meterValue <= 0) {
+          return null;
+        }
+
+        const normalizedMeter = Number(meterValue.toFixed(3));
+        return {
+          value: normalizedMeter.toFixed(3),
+          label: `${normalizedMeter.toLocaleString('fr-FR', {
+            minimumFractionDigits: normalizedMeter < 1 ? 3 : 2,
+            maximumFractionDigits: 3,
+          })} m`,
+          palletCount: Number.isFinite(palletCountValue) ? Math.round(palletCountValue) : null,
+        };
+      })
+      .filter(Boolean);
+  }, [meta]);
+
+  const selectedPalletMeterOption = useMemo(
+    () => palletMeterOptions.find((option) => option.value === formState.palletMeters) || null,
+    [palletMeterOptions, formState.palletMeters]
   );
 
   const appliedDistanceKm = useMemo(() => {
@@ -428,25 +468,11 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
 
   const totalEstimateHeader = useMemo(() => {
     if (!formattedDistanceLabel) {
-      return 'Tarif total estimé';
+      return 'Tarif total estimÃ©';
     }
 
-    return `Tarif total estimé (${formattedDistanceLabel})`;
+    return `Tarif total estimÃ© (${formattedDistanceLabel})`;
   }, [formattedDistanceLabel]);
-
-  const bestScore = useMemo(() => {
-    let maxScore = null;
-    providers.forEach((provider) => {
-      const score = Number(provider.score);
-      if (!Number.isFinite(score)) {
-        return;
-      }
-      if (maxScore === null || score > maxScore) {
-        maxScore = score;
-      }
-    });
-    return maxScore;
-  }, [providers]);
 
   const tariffViewerUrl = useMemo(() => {
     if (!tariffModal.open || tariffModal.error || !tariffModal.url) {
@@ -480,6 +506,8 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
     setFormState(empty);
     setAppliedFilters(empty);
     setPage(1);
+    setSortBy('estimatedCost');
+    setSortOrder('asc');
     setEstimationDeparture('');
     setEstimationArrival('');
   }, []);
@@ -570,161 +598,194 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
   }, []);
 
   const handleExportTariffGridPdf = useCallback(
-    async (provider) => {
-      if (typeof window === 'undefined' || !provider) {
+  async (provider) => {
+    if (typeof window === 'undefined' || !provider) {
+      return;
+    }
+
+    try {
+      let gridData = null;
+      if (
+        tariffGridModal.open &&
+        tariffGridModal.provider?.id === provider.id &&
+        hasTariffGridData
+      ) {
+        gridData = tariffGridModal.data;
+      } else {
+        const { data } = await apiClient.get(`/api/providers/${provider.id}/base-tariff-grid`);
+        gridData = data?.data || null;
+      }
+
+      if (
+        !gridData ||
+        !Array.isArray(gridData.paletteCounts) ||
+        !gridData.paletteCounts.length ||
+        !Array.isArray(gridData.rows) ||
+        !gridData.rows.length
+      ) {
+        window.alert('Aucune grille tarifaire disponible pour ce transporteur.');
         return;
       }
 
-      try {
-        let gridData = null;
-        if (
-          tariffGridModal.open &&
-          tariffGridModal.provider?.id === provider.id &&
-          hasTariffGridData
-        ) {
-          gridData = tariffGridModal.data;
-        } else {
-          const { data } = await apiClient.get(`/api/providers/${provider.id}/base-tariff-grid`);
-          gridData = data?.data || null;
-        }
+      const paletteCounts = gridData.paletteCounts;
+      const rows = gridData.rows;
+      const zoneLabels = gridData.meta?.zones || {};
+      const tariffTypeLabel =
+        gridData.type === 'idf' ? 'Tarifs Ile-de-France' : 'Tarifs hors IDF';
 
-        if (
-          !gridData ||
-          !Array.isArray(gridData.paletteCounts) ||
-          !gridData.paletteCounts.length ||
-          !Array.isArray(gridData.rows) ||
-          !gridData.rows.length
-        ) {
-          window.alert('Aucune grille tarifaire disponible pour ce transporteur.');
-          return;
-        }
-
-        const paletteCounts = gridData.paletteCounts;
-        const rows = gridData.rows;
-        const zoneLabels = gridData.meta?.zones || {};
-        const tariffTypeLabel =
-          gridData.type === 'idf' ? 'Tarifs Île-de-France' : 'Tarifs hors IDF';
-
-        const legendHtml =
-          gridData.type === 'non-idf' && Object.keys(zoneLabels).length
-            ? `
-              <div class="tariff-grid__meta">
-                <span>Zones couvertes :</span>
-                <ul class="tariff-grid__legend">
-                  ${Object.entries(zoneLabels)
-                    .map(([zoneKey, label]) => `<li><strong>${label}</strong></li>`)
-                    .join('')}
-                </ul>
-              </div>
-            `
-            : '';
-
-        const headerCells = [
-          gridData.type === 'non-idf' ? '<th>Zone</th>' : '',
-          `<th>${gridData.type === 'idf' ? 'Destination' : 'Distance'}</th>`,
-          ...paletteCounts.map(
-            (count) => `<th>${count} palette${count > 1 ? 's' : ''}</th>`
-          ),
-        ].join('');
-
-        const rowCells = rows
-          .map((row) => {
-            const zoneCell =
-              gridData.type === 'non-idf'
-                ? `<td>${zoneLabels[row.zone] || row.zone || '--'}</td>`
-                : '';
-            const distanceCell = `<td>${row.label || '--'}</td>`;
-            const valuesCells = paletteCounts
-              .map((_, index) => {
-                const raw = Array.isArray(row.values) ? row.values[index] : null;
-                const value = typeof raw === 'number' && Number.isFinite(raw) ? raw : null;
-                return `<td>${formatCurrencyValue(value)}</td>`;
-              })
-              .join('');
-            return `<tr>${zoneCell}${distanceCell}${valuesCells}</tr>`;
-          })
-          .join('');
-
-        const departureDepartment = gridData.meta?.departureDepartment;
-        const title = `Grille tarifaire ${provider.name || ''}`.trim() || 'Grille tarifaire';
-        const subtitle = departureDepartment ? `Départ : ${departureDepartment}` : '';
-        const gridHtml = `
-          <div class="tariff-grid printable">
+      const legendHtml =
+        gridData.type === 'non-idf' && Object.keys(zoneLabels).length
+          ? `
             <div class="tariff-grid__meta">
-              <span>${tariffTypeLabel}</span>
+              <span>Zones couvertes :</span>
+              <ul class="tariff-grid__legend">
+                ${Object.entries(zoneLabels)
+                  .map(([zoneKey, label]) => `<li><strong>${label}</strong></li>`)
+                  .join('')}
+              </ul>
             </div>
-            ${legendHtml}
-            <div class="tariff-grid__table-wrapper">
-              <table class="tariff-grid-table">
-                <thead>
-                  <tr>${headerCells}</tr>
-                </thead>
-                <tbody>
-                  ${rowCells}
-                </tbody>
-              </table>
-            </div>
+          `
+          : '';
+
+      const headerCells = [
+        gridData.type === 'non-idf' ? '<th>Zone</th>' : '',
+        `<th>${gridData.type === 'idf' ? 'Destination' : 'Distance'}</th>`,
+        ...paletteCounts.map(
+          (count) => `<th>${count} palette${count > 1 ? 's' : ''}</th>`
+        ),
+      ].join('');
+
+      const rowCells = rows
+        .map((row) => {
+          const zoneCell =
+            gridData.type === 'non-idf'
+              ? `<td>${zoneLabels[row.zone] || row.zone || '--'}</td>`
+              : '';
+          const distanceCell = `<td>${row.label || '--'}</td>`;
+          const valuesCells = paletteCounts
+            .map((_, index) => {
+              const raw = Array.isArray(row.values) ? row.values[index] : null;
+              const value = typeof raw === 'number' && Number.isFinite(raw) ? raw : null;
+              return `<td>${formatCurrencyValue(value)}</td>`;
+            })
+            .join('');
+          return `<tr>${zoneCell}${distanceCell}${valuesCells}</tr>`;
+        })
+        .join('');
+
+      const departureDepartment = gridData.meta?.departureDepartment;
+      const title = `Grille tarifaire ${provider.name || ''}`.trim() || 'Grille tarifaire';
+      const subtitle = departureDepartment ? `Depart : ${departureDepartment}` : '';
+      const gridHtml = `
+        <div class="tariff-grid printable">
+          <div class="tariff-grid__meta">
+            <span>${tariffTypeLabel}</span>
           </div>
-        `;
+          ${legendHtml}
+          <div class="tariff-grid__table-wrapper">
+            <table class="tariff-grid-table">
+              <thead>
+                <tr>${headerCells}</tr>
+              </thead>
+              <tbody>
+                ${rowCells}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
 
-        const targetWindow = window.open('', '_blank', 'noopener,noreferrer,width=900,height=700');
-        if (!targetWindow) {
-          window.alert(
-            "Impossible d'ouvrir la fenêtre de téléchargement. Vérifiez votre bloqueur de pop-up."
-          );
-          return;
-        }
+      const printStyles = `
+        * { box-sizing: border-box; font-family: "Segoe UI", Arial, sans-serif; color: #0f172a; }
+        body { margin: 24px; background: #fff; }
+        h1 { font-size: 20px; margin: 0 0 8px; }
+        h2 { font-size: 14px; margin: 0 0 16px; color: #475569; }
+        .tariff-grid { display: block; }
+        .tariff-grid__meta { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; font-size: 12px; color: #475569; }
+        .tariff-grid__legend { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+        .tariff-grid__legend li { background: #e2e8f0; color: #1e293b; padding: 4px 10px; border-radius: 999px; font-size: 11px; }
+        .tariff-grid__table-wrapper { border: 1px solid #cbd5f5; border-radius: 8px; overflow: hidden; margin-top: 12px; }
+        .tariff-grid-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        th, td { border: 1px solid #cbd5f5; padding: 10px; text-align: center; }
+        th { background: #e2e8f0; font-weight: 600; }
+        td:first-child, th:first-child, td:nth-child(2), th:nth-child(2) { text-align: left; }
+      `;
 
-        const printStyles = `
-          * { box-sizing: border-box; font-family: "Segoe UI", Arial, sans-serif; color: #0f172a; }
-          body { margin: 24px; background: #fff; }
-          h1 { font-size: 20px; margin: 0 0 8px; }
-          h2 { font-size: 14px; margin: 0 0 16px; color: #475569; }
-          .tariff-grid { display: block; }
-          .tariff-grid__meta { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; font-size: 12px; color: #475569; }
-          .tariff-grid__legend { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 8px; }
-          .tariff-grid__legend li { background: #e2e8f0; color: #1e293b; padding: 4px 10px; border-radius: 999px; font-size: 11px; }
-          .tariff-grid__table-wrapper { border: 1px solid #cbd5f5; border-radius: 8px; overflow: hidden; margin-top: 12px; }
-          .tariff-grid-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-          th, td { border: 1px solid #cbd5f5; padding: 10px; text-align: center; }
-          th { background: #e2e8f0; font-weight: 600; }
-          td:first-child, th:first-child, td:nth-child(2), th:nth-child(2) { text-align: left; }
-        `;
+      const printableHtml = `
+        <!DOCTYPE html>
+        <html lang="fr">
+          <head>
+            <meta charset="utf-8" />
+            <title>${title}</title>
+            <style>${printStyles}</style>
+          </head>
+          <body>
+            <h1>${title}</h1>
+            ${subtitle ? `<h2>${subtitle}</h2>` : ''}
+            <div class="meta">
+              Exporte le ${new Date().toLocaleString('fr-FR')}
+            </div>
+            ${gridHtml}
+          </body>
+        </html>
+      `;
 
-        targetWindow.document.write(`
-          <!DOCTYPE html>
-          <html lang="fr">
-            <head>
-              <meta charset="utf-8" />
-              <title>${title}</title>
-              <style>${printStyles}</style>
-            </head>
-            <body>
-              <h1>${title}</h1>
-              ${subtitle ? `<h2>${subtitle}</h2>` : ''}
-              <div class="meta">
-                Exporté le ${new Date().toLocaleString('fr-FR')}
-              </div>
-              ${gridHtml}
-            </body>
-          </html>
-        `);
-        targetWindow.document.close();
-        targetWindow.focus();
-        targetWindow.print();
-      } catch (error) {
-        console.error("Erreur lors de l'export de la grille au format PDF", error);
-        window.alert('Impossible de générer le PDF pour ce transporteur.');
+      const iframe = document.createElement('iframe');
+      iframe.title = 'export-tariff-grid';
+      iframe.style.position = 'fixed';
+      iframe.style.top = '-10000px';
+      iframe.style.left = '-10000px';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.opacity = '0';
+      iframe.style.pointerEvents = 'none';
+      document.body.appendChild(iframe);
+
+      const iframeWindow = iframe.contentWindow;
+      if (!iframeWindow) {
+        document.body.removeChild(iframe);
+        window.alert('Impossible de preparer le document a imprimer.');
+        return;
       }
-    },
-    [
-      formatCurrencyValue,
-      hasTariffGridData,
-      tariffGridModal.data,
-      tariffGridModal.open,
-      tariffGridModal.provider,
-    ]
-  );
+
+      const finalizePrint = () => {
+        setTimeout(() => {
+          try {
+            iframeWindow.focus();
+            iframeWindow.print();
+          } catch (err) {
+            console.warn('Impression automatique indisponible', err);
+            window.alert('Utilisez Ctrl+P pour enregistrer la grille en PDF.');
+          } finally {
+            setTimeout(() => {
+              try {
+                document.body.removeChild(iframe);
+              } catch (cleanupError) {
+                console.debug('Impossible de retirer le cadre dimpression', cleanupError);
+              }
+            }, 500);
+          }
+        }, 150);
+      };
+
+      iframeWindow.document.open();
+      iframeWindow.document.write(printableHtml);
+      iframeWindow.document.close();
+
+      setTimeout(finalizePrint, 200);
+    } catch (error) {
+      console.error("Erreur lors de l'export de la grille au format PDF", error);
+      window.alert('Impossible de generer le PDF pour ce transporteur.');
+    }
+  },
+  [
+    formatCurrencyValue,
+    hasTariffGridData,
+    tariffGridModal.data,
+    tariffGridModal.open,
+    tariffGridModal.provider,
+  ]
+);
 
   useEffect(() => {
     if (!tariffModal.open && !tariffGridModal.open) {
@@ -775,6 +836,9 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
         sortOrder,
       };
 
+      params.sortBy = params.sortBy || 'estimatedCost';
+      params.sortOrder = params.sortOrder || 'asc';
+
       const addListParam = (key, values) => {
         if (Array.isArray(values) && values.length > 0) {
           params[key] = values.join(',');
@@ -792,9 +856,9 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
         params.q = trimmedQuery;
       }
 
-      addListParam('modes', appliedFilters.modes);
       addListParam('coverage', appliedFilters.coverage);
       addListParam('features', appliedFilters.features);
+      addListParam('supplementaryOptions', appliedFilters.supplementaryOptions);
       addListParam('contractFlexibility', appliedFilters.contractFlexibility);
       addListParam('deliveryDepartments', appliedFilters.deliveryDepartments);
       addListParam('pickupDepartments', appliedFilters.pickupDepartments);
@@ -805,6 +869,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
       addNumberParam('maxCo2', appliedFilters.maxCo2);
       addNumberParam('maxPrice', appliedFilters.maxPrice);
       addNumberParam('palletCount', appliedFilters.palletCount);
+      addNumberParam('palletMeters', appliedFilters.palletMeters);
       addNumberParam('weightKg', appliedFilters.weightKg);
       addNumberParam('distanceKm', appliedFilters.distanceKm);
 
@@ -835,7 +900,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
         }
 
         console.error('Erreur lors du chargement des transporteurs', err);
-        setError("Impossible de charger les transporteurs. Réessayez plus tard.");
+        setError("Impossible de charger les transporteurs. RÃ©essayez plus tard.");
         setProviders([]);
         setMeta(null);
       } finally {
@@ -860,7 +925,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
           <h1>Comparateur Transporteurs</h1>
           <div className="header-stats">
             <span>
-              <strong>{meta?.total ?? providers.length}</strong> Résultat{(meta?.total ?? providers.length) > 1 ? 's' : ''}
+              <strong>{meta?.total ?? providers.length}</strong> RÃ©sultat{(meta?.total ?? providers.length) > 1 ? 's' : ''}
             </span>
             {meta?.page && (
               <span>
@@ -880,12 +945,12 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
             className={`btn-create ${isAuthenticated ? 'btn-create--active' : 'btn-create--login'}`}
             onClick={handleCreateRequest}
           >
-            {isAuthenticated ? 'Créer un fournisseur' : 'Se connecter pour créer'}
+            {isAuthenticated ? 'CrÃ©er un fournisseur' : 'Se connecter pour crÃ©er'}
           </button>
           <div className={`header-user ${isAuthenticated ? '' : 'header-user--anonymous'}`}>
             <span>{isAuthenticated ? displayName : 'Consultation libre'}</span>
             {isAuthenticated && onLogout && (
-              <button onClick={onLogout}>Déconnexion</button>
+              <button onClick={onLogout}>DÃ©connexion</button>
             )}
           </div>
         </div>
@@ -898,7 +963,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
           onClick={() => setFiltersExpanded(!filtersExpanded)}
         >
           <span>Filtres de recherche</span>
-          <span className={`toggle-icon ${filtersExpanded ? 'expanded' : ''}`}>▼</span>
+          <span className={`toggle-icon ${filtersExpanded ? 'expanded' : ''}`}>â–¼</span>
         </button>
 
         {filtersExpanded && (
@@ -928,10 +993,42 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                   />
                 </label>
               </div>
+              <div className="filter-group">
+                <label>
+                  <span>Metres de palette</span>
+                  <select
+                    value={formState.palletMeters}
+                    onChange={(e) => {
+                      updateFormState('palletMeters', e.target.value);
+                      if (e.target.value) {
+                        const matched = palletMeterOptions.find((option) => option.value === e.target.value);
+                        if (matched && Number.isFinite(matched.palletCount)) {
+                          updateFormState('palletCount', String(matched.palletCount));
+                        }
+                      }
+                    }}
+                  >
+                    <option value="">Selectionner</option>
+                    {palletMeterOptions.map((option) => (
+                      <option key={`meter-${option.value}`} value={option.value}>
+                        {option.label}
+                        {option.palletCount ? ` (approx. ${option.palletCount} palettes)` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {selectedPalletMeterOption?.palletCount && (
+                  <small className="helper-text">
+                    approx.{' '}
+                    {selectedPalletMeterOption.palletCount.toLocaleString('fr-FR')}{' '}
+                    palette{selectedPalletMeterOption.palletCount > 1 ? 's' : ''}
+                  </small>
+                )}
+              </div>
 
               <div className="filter-group">
                 <label>
-                  <span>Prix max (€)</span>
+                  <span>Prix max (â‚¬)</span>
                   <input
                     type="number"
                     min="0"
@@ -943,15 +1040,10 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
             </div>
 
             <div className="filters-dropdowns">
-              <SearchableMultiSelect
-                label="Modes de transport"
-                options={MODE_OPTIONS}
-                selectedValues={formState.modes}
-                onChange={(values) => updateFormState('modes', values)}
               />
 
               <SearchableMultiSelect
-                label="Services & Équipements"
+                label="Services & Ã‰quipements"
                 options={FEATURE_GROUP_DEFINITIONS.flatMap(group => 
                   group.keys.map(key => ({ 
                     value: key, 
@@ -961,12 +1053,19 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                 selectedValues={formState.features}
                 onChange={(values) => updateFormState('features', values)}
               />
+
+              <SearchableMultiSelect
+                label="Options supplementaires"
+                options={SUPPLEMENTARY_OPTIONS}
+                selectedValues={formState.supplementaryOptions}
+                onChange={(values) => updateFormState('supplementaryOptions', values)}
+              />
             </div>
 
             <div className="estimation-controls">
               <div className="filter-group">
                 <label>
-                  <span>Départ (estimation)</span>
+                  <span>DÃ©part (estimation)</span>
                   <select
                     value={estimationDeparture}
                     onChange={(e) => {
@@ -974,9 +1073,9 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                       setPage(1);
                     }}
                   >
-                    <option value="">Sélectionner</option>
+                    <option value="">SÃ©lectionner</option>
                     {popularDepartmentOptions.length > 0 && (
-                      <optgroup key="popular-departments" label="Départements les plus utilisés">
+                      <optgroup key="popular-departments" label="DÃ©partements les plus utilisÃ©s">
                         {popularDepartmentOptions.map((option) => (
                           <option key={`depart-${option.value}`} value={option.value}>
                             {option.label}
@@ -985,7 +1084,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                       </optgroup>
                     )}
                     {otherDepartmentOptions.length > 0 && (
-                      <optgroup key="other-departments" label="Tous les départements">
+                      <optgroup key="other-departments" label="Tous les dÃ©partements">
                         {otherDepartmentOptions.map((option) => (
                           <option key={`depart-${option.value}`} value={option.value}>
                             {option.label}
@@ -998,7 +1097,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
               </div>
               <div className="filter-group">
                 <label>
-                  <span>Arrivée (estimation)</span>
+                  <span>ArrivÃ©e (estimation)</span>
                   <select
                     value={estimationArrival}
                     onChange={(e) => {
@@ -1006,9 +1105,9 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                       setPage(1);
                     }}
                   >
-                    <option value="">Sélectionner</option>
+                    <option value="">SÃ©lectionner</option>
                     {popularDepartmentOptions.length > 0 && (
-                      <optgroup key="popular-arrival-departments" label="Départements les plus utilisés">
+                      <optgroup key="popular-arrival-departments" label="DÃ©partements les plus utilisÃ©s">
                         {popularDepartmentOptions.map((option) => (
                           <option key={`arrivee-${option.value}`} value={option.value}>
                             {option.label}
@@ -1017,7 +1116,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                       </optgroup>
                     )}
                     {otherDepartmentOptions.length > 0 && (
-                      <optgroup key="other-arrival-departments" label="Tous les départements">
+                      <optgroup key="other-arrival-departments" label="Tous les dÃ©partements">
                         {otherDepartmentOptions.map((option) => (
                           <option key={`arrivee-${option.value}`} value={option.value}>
                             {option.label}
@@ -1031,12 +1130,12 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
               <div className="estimation-info">
                 {appliedDistanceKm ? (
                   <span>
-                    Distance estimée : <strong>{appliedDistanceKm.toFixed(1)} km</strong>
+                    Distance estimÃ©e : <strong>{appliedDistanceKm.toFixed(1)} km</strong>
                     {meta?.estimatedDistanceSource === 'departments' && ' (calcul automatique)'}
                     {meta?.estimatedDistanceSource === 'manual' && ' (distance saisie)'}
                   </span>
                 ) : (
-                  <span>Saisissez une distance ou sélectionnez départ/arrivée</span>
+                  <span>Saisissez une distance ou sÃ©lectionnez dÃ©part/arrivÃ©e</span>
                 )}
               </div>
             </div>
@@ -1056,7 +1155,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
         )}
       </section>
 
-      {/* Liste des fournisseurs - Prend maintenant la majorité de l'espace */}
+      {/* Liste des fournisseurs - Prend maintenant la majoritÃ© de l'espace */}
       <main className="providers-main">
         <section className="providers-list">
           <div className="list-header">
@@ -1065,12 +1164,12 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
               <label className="control-inline">
                 <span>Trier par</span>
                 <select value={sortBy} onChange={(e) => { setSortBy(e.target.value); setPage(1); }}>
-                  <option value="score">Score global</option>
+                  <option value="estimatedCost">Tarif total estimé</option>
                   <option value="pricePerKm">Prix / km</option>
                   <option value="customerSatisfaction">Satisfaction</option>
-                  <option value="leadTimeDays">Délai</option>
-                  <option value="onTimeRate">Ponctualité</option>
-                  <option value="co2GramsPerTonneKm">CO₂</option>
+                  <option value="leadTimeDays">DÃ©lai</option>
+                  <option value="onTimeRate">PonctualitÃ©</option>
+                  <option value="co2GramsPerTonneKm">COâ‚‚</option>
                 </select>
               </label>
               <button
@@ -1081,10 +1180,10 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                   setPage(1);
                 }}
               >
-                {sortOrder === 'asc' ? 'Ordre croissant' : 'Ordre décroissant'}
+                {sortOrder === 'asc' ? 'Ordre croissant' : 'Ordre dÃ©croissant'}
               </button>
               <label className="control-inline">
-                <span>Résultats / page</span>
+                <span>RÃ©sultats / page</span>
                 <select
                   value={pageSize}
                   onChange={(e) => {
@@ -1104,7 +1203,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
           </div>
 
           <div className="results-table">
-            {/* Tableau des résultats */}
+            {/* Tableau des rÃ©sultats */}
             <div className="table-responsive">
               {error && (
                 <div className="empty-state error-state">
@@ -1118,7 +1217,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
               )}
               {!error && !loading && providers.length === 0 && (
                 <div className="empty-state">
-                  <p>Aucun transporteur trouvé avec ces critères</p>
+                  <p>Aucun transporteur trouvÃ© avec ces critÃ¨res</p>
                 </div>
               )}
               {!error && !loading && providers.length > 0 && (
@@ -1126,27 +1225,20 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                   <thead>
                     <tr>
                       <th>Transporteur</th>
-                      <th>Département</th>
+                      <th>DÃ©partement</th>
                       <th>Contact</th>
-                      <th>Téléphone</th>
-                      <th>Distance estimée</th>
+                      <th>TÃ©lÃ©phone</th>
+                      <th>Distance estimÃ©e</th>
                       <th>Tarif HA (grille)</th>
                       <th>Tarif HA EUR/km</th>
                       <th>{totalEstimateHeader}</th>
-                      <th>Satisfaction</th>
-                      <th>Délai</th>
-                      <th>CO2</th>
                       <th>Grille tarif transporteur</th>
                       <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {providers.map((provider) => {
-                      const providerScore = Number(provider.score);
-                      const isBest =
-                        bestScore !== null &&
-                        Number.isFinite(providerScore) &&
-                        Math.abs(providerScore - bestScore) < 0.0001;
+                    {providers.map((provider, index) => {
+                      const isBest = index === 0;
 
                       const departmentRaw =
                         provider.profile?.department ||
@@ -1232,9 +1324,6 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                         }
                         return parts.length ? parts.join(' - ') : null;
                       })();
-                      const satisfactionValue = Number(provider.customerSatisfaction);
-                      const leadTimeValue = Number(provider.leadTimeDays);
-                      const co2Value = Number(provider.co2GramsPerTonneKm);
 
                       return (
                         <tr key={provider.id} className={isBest ? 'best-result' : undefined}>
@@ -1244,7 +1333,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                                 <strong>{provider.name}</strong>
                                 {provider.hasTariffDocument && (
                                   <span className="provider-name-badge" aria-hidden="true">
-                                    PDF
+                                PDF
                                   </span>
                                 )}
                               </div>
@@ -1291,28 +1380,14 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                           </td>
                           <td>{estimatedCostDisplay}</td>
                           <td>
-                            {Number.isFinite(satisfactionValue)
-                              ? `${satisfactionValue.toFixed(1)} / 5`
-                              : '--'}
-                          </td>
-                          <td>{Number.isFinite(leadTimeValue) ? `${leadTimeValue} j` : '--'}</td>
-                          <td>{Number.isFinite(co2Value) ? `${co2Value} g/t.km` : '--'}</td>
-                          <td>
                             <div className="tariff-actions">
-                              <button
-                                type="button"
-                                className="btn-grid"
-                                onClick={() => handleOpenTariffGrid(provider)}
-                              >
-                                Voir la grille
-                              </button>
                               <button
                                 type="button"
                                 className="btn-tariff btn-tariff--pdf"
                                 onClick={() => handleExportTariffGridPdf(provider)}
-                                title="Exporter la grille en PDF"
+                                title="Telecharger la grille en PDF"
                               >
-                                📄 PDF
+                                PDF
                               </button>
                             </div>
                           </td>
@@ -1333,7 +1408,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                 onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
                 disabled={loading || !(meta?.hasPreviousPage)}
               >
-                Précédent
+                PrÃ©cÃ©dent
               </button>
               <span>
                 Page {meta?.page ?? page} / {meta?.totalPages ?? Math.max(Math.ceil((meta?.total ?? providers.length) / pageSize), 1)}
@@ -1479,7 +1554,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                   )}
                   {tariffModal.type === 'remote' && !tariffModal.error && (
                     <p className="tariff-modal__hint">
-                      Le document est hébergé sur un site externe. Utilisez le bouton d&apos;ouverture si l&apos;aperçu ne s&apos;affiche pas.
+                      Le document est hÃ©bergÃ© sur un site externe. Utilisez le bouton d&apos;ouverture si l&apos;aperÃ§u ne s&apos;affiche pas.
                     </p>
                   )}
                 </>
@@ -1496,7 +1571,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                   rel="noopener noreferrer"
                   className="tariff-modal__btn tariff-modal__btn--primary"
                 >
-                  {tariffModal.type === 'remote' ? 'Ouvrir dans un nouvel onglet' : 'Télécharger le PDF'}
+                  {tariffModal.type === 'remote' ? 'Ouvrir dans un nouvel onglet' : 'TÃ©lÃ©charger le PDF'}
                 </a>
               )}
             </footer>
@@ -1508,6 +1583,11 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
 };
 
 export default Dashboard;
+
+
+
+
+
 
 
 

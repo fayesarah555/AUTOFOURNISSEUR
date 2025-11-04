@@ -18,6 +18,8 @@ const SERVICE_DEFINITIONS = [
   { feature: 'fosse', code: 'fosse', label: 'Fosse de dépotage' },
   { feature: 'porte-char', code: 'porte_chars', label: 'Porte-chars' },
   { feature: 'convoi-exceptionnel', code: 'convoi_exceptionnel', label: 'Convoi exceptionnel' },
+  { feature: 'prise-rdv', code: 'prise_rdv', label: 'Prise de RDV' },
+  { feature: 'chgt-au-pont', code: 'chgt_pont', label: 'Chgt au Pont' },
 ];
 
 const equipmentByFeature = new Map(EQUIPMENT_DEFINITIONS.map((item) => [item.feature, item]));
