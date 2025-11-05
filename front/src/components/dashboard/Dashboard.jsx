@@ -464,13 +464,6 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
     })} km`;
   }, [appliedDistanceKm]);
 
-  const totalEstimateHeader = useMemo(() => {
-    if (!formattedDistanceLabel) {
-      return 'Tarif total estimÃ©';
-    }
-
-    return `Tarif total estimÃ© (${formattedDistanceLabel})`;
-  }, [formattedDistanceLabel]);
 
   const tariffViewerUrl = useMemo(() => {
     if (!tariffModal.open || tariffModal.error || !tariffModal.url) {
@@ -1199,14 +1192,12 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                       <th>Contact</th>
                       <th>TÃ©lÃ©phone</th>
                       <th>Distance estimÃ©e</th>
-                      <th>Tarif HA (grille)</th>
-                      <th>Tarif HA EUR/km</th>
-                      <th>{totalEstimateHeader}</th>
                       <th>Grille tarif transporteur</th>
                       <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
+
                     {providers.map((provider, index) => {
                       const isBest = index === 0;
 
@@ -1219,81 +1210,6 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
 
                       const contactDisplay = provider.profile?.contact?.trim() || '--';
                       const phoneDisplay = provider.profile?.phone?.trim() || '--';
-
-                      const pricingInfo = provider.pricing || {};
-                      const hasTariffGrid =
-                        typeof pricingInfo.gridPrice === 'number' && Number.isFinite(Number(pricingInfo.gridPrice));
-                      const gridPriceValue = hasTariffGrid
-                        ? Number(pricingInfo.gridPrice)
-                        : Number(provider.baseHandlingFee);
-                      const gridPriceDisplay = Number.isFinite(gridPriceValue)
-                        ? currencyFormatter.format(gridPriceValue)
-                        : '--';
-
-                      const pricePerKmSource =
-                        pricingInfo.pricePerKm !== undefined && pricingInfo.pricePerKm !== null
-                          ? pricingInfo.pricePerKm
-                          : provider.pricePerKm;
-                      const pricePerKmValue = Number(pricePerKmSource);
-                      const pricePerKmDisplay = Number.isFinite(pricePerKmValue)
-                        ? `${pricePerKmValue.toLocaleString('fr-FR', {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })} EUR / km`
-                        : '--';
-
-                      const estimatedCostValue =
-                        typeof provider.estimatedCost === 'number' && Number.isFinite(provider.estimatedCost)
-                          ? provider.estimatedCost
-                          : hasTariffGrid
-                          ? gridPriceValue
-                          : typeof appliedDistanceKm === 'number'
-                          ? (Number(provider.baseHandlingFee) || 0) +
-                            (Number(provider.pricePerKm) || 0) * appliedDistanceKm
-                          : null;
-                      const estimatedCostDisplay =
-                        typeof estimatedCostValue === 'number' && Number.isFinite(estimatedCostValue)
-                          ? currencyFormatter.format(estimatedCostValue)
-                          : '--';
-
-                      const palletCountValue = Number(pricingInfo.palletCount);
-                      const hasPalletCount = Number.isFinite(palletCountValue);
-                      const palletMplValue = Number(pricingInfo.palletMpl);
-                      const hasPalletMpl = Number.isFinite(palletMplValue);
-
-                      const sourceLabel = (() => {
-                        switch (pricingInfo.source) {
-                          case 'idf':
-                            return 'Tarif IDF';
-                          case 'non-idf-zc':
-                            return 'Hors IDF - Zone courte';
-                          case 'non-idf-zl':
-                            return 'Hors IDF - Zone longue';
-                          default:
-                            return null;
-                        }
-                      })();
-
-                      const referenceDistanceDisplay =
-                        typeof pricingInfo.referenceDistanceKm === 'number' &&
-                        Number.isFinite(pricingInfo.referenceDistanceKm)
-                          ? pricingInfo.referenceDistanceKm.toLocaleString('fr-FR') + ' km'
-                          : null;
-
-                      const surchargeLabel = (() => {
-                        const parts = [];
-                        if (Number.isFinite(Number(pricingInfo.departureSurcharge))) {
-                          parts.push(
-                            `Enlevement +${Number(pricingInfo.departureSurcharge).toLocaleString('fr-FR')} EUR`
-                          );
-                        }
-                        if (Number.isFinite(Number(pricingInfo.deliverySurcharge))) {
-                          parts.push(
-                            `Livraison +${Number(pricingInfo.deliverySurcharge).toLocaleString('fr-FR')} EUR`
-                          );
-                        }
-                        return parts.length ? parts.join(' - ') : null;
-                      })();
 
                       return (
                         <tr key={provider.id} className={isBest ? 'best-result' : undefined}>
@@ -1315,41 +1231,6 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                           <td>{phoneDisplay}</td>
                           <td>{formattedDistanceLabel || '--'}</td>
                           <td>
-                            {gridPriceDisplay}
-                            {hasTariffGrid && (
-                              <>
-                                {sourceLabel && (
-                                  <small className="pricing-detail">
-                                    {sourceLabel}
-                                    {referenceDistanceDisplay ? ` - ${referenceDistanceDisplay}` : ''}
-                                  </small>
-                                )}
-                                {hasPalletCount && (
-                                  <small className="pricing-detail">
-                                    {`${palletCountValue.toLocaleString('fr-FR')} palette${palletCountValue > 1 ? 's' : ''}${
-                                      hasPalletMpl
-                                        ? ` - ${palletMplValue.toLocaleString('fr-FR', {
-                                            minimumFractionDigits: 1,
-                                            maximumFractionDigits: 1,
-                                          })} MPL`
-                                        : ''
-                                    }`}
-                                  </small>
-                                )}
-                              </>
-                            )}
-                          </td>
-                          <td>
-                            {pricePerKmDisplay}
-                            {pricingInfo.departmentName && (
-                              <small className="pricing-detail">{pricingInfo.departmentName}</small>
-                            )}
-                            {surchargeLabel && (
-                              <small className="pricing-detail">{surchargeLabel}</small>
-                            )}
-                          </td>
-                          <td>{estimatedCostDisplay}</td>
-                          <td>
                             <div className="tariff-actions">
                               <button
                                 type="button"
@@ -1367,6 +1248,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                         </tr>
                       );
                     })}
+
                   </tbody>
                 </table>
               )}
