@@ -297,8 +297,6 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
   const [filtersExpanded, setFiltersExpanded] = useState(true);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
-  const [sortBy, setSortBy] = useState('estimatedCost');
-  const [sortOrder, setSortOrder] = useState('asc');
   const [meta, setMeta] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -506,8 +504,6 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
     setFormState(empty);
     setAppliedFilters(empty);
     setPage(1);
-    setSortBy('estimatedCost');
-    setSortOrder('asc');
     setEstimationDeparture('');
     setEstimationArrival('');
   }, []);
@@ -832,12 +828,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
       const params = {
         page,
         pageSize,
-        sortBy,
-        sortOrder,
       };
-
-      params.sortBy = params.sortBy || 'estimatedCost';
-      params.sortOrder = params.sortOrder || 'asc';
 
       const addListParam = (key, values) => {
         if (Array.isArray(values) && values.length > 0) {
@@ -915,7 +906,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
     return () => {
       isCancelled = true;
     };
-  }, [appliedFilters, page, pageSize, sortBy, sortOrder, estimationDeparture, estimationArrival]);
+  }, [appliedFilters, page, pageSize, estimationDeparture, estimationArrival]);
 
   return (
     <div className="dashboard-improved">
@@ -1161,27 +1152,6 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
           <div className="list-header">
             <h2>Liste des transporteurs</h2>
             <div className="list-controls">
-              <label className="control-inline">
-                <span>Trier par</span>
-                <select value={sortBy} onChange={(e) => { setSortBy(e.target.value); setPage(1); }}>
-                  <option value="estimatedCost">Tarif total estimé</option>
-                  <option value="pricePerKm">Prix / km</option>
-                  <option value="customerSatisfaction">Satisfaction</option>
-                  <option value="leadTimeDays">DÃ©lai</option>
-                  <option value="onTimeRate">PonctualitÃ©</option>
-                  <option value="co2GramsPerTonneKm">COâ‚‚</option>
-                </select>
-              </label>
-              <button
-                type="button"
-                className="btn-sort-order"
-                onClick={() => {
-                  setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
-                  setPage(1);
-                }}
-              >
-                {sortOrder === 'asc' ? 'Ordre croissant' : 'Ordre dÃ©croissant'}
-              </button>
               <label className="control-inline">
                 <span>RÃ©sultats / page</span>
                 <select
