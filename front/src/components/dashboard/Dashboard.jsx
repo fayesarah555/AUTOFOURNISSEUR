@@ -952,67 +952,162 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
 
         {filtersExpanded && (
           <div className="filters-content">
-            <div className="filters-row">
-              <div className="filter-group">
-                <label>
-                  <span>Poids (kg)</span>
-                  <input
-                    type="number"
-                    min="0"
-                    value={formState.weightKg}
-                    onChange={(e) => updateFormState('weightKg', e.target.value)}
-                  />
-                </label>
+            <div className="filters-sections">
+              <div className="filters-subsection filters-subsection--search">
+                <h3>Barre de recherche</h3>
+                <div className="filters-grid">
+                  <div className="filter-group">
+                    <label>
+                      <span>Depart (estimation)</span>
+                      <select
+                        value={estimationDeparture}
+                        onChange={(e) => {
+                          setEstimationDeparture(e.target.value);
+                          setPage(1);
+                        }}
+                      >
+                        <option value="">Selectionner</option>
+                        {popularDepartmentOptions.length > 0 && (
+                          <optgroup key="popular-departments" label="Departements les plus utilises">
+                            {popularDepartmentOptions.map((option) => (
+                              <option key={'depart-' + option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {otherDepartmentOptions.length > 0 && (
+                          <optgroup key="other-departments" label="Tous les departements">
+                            {otherDepartmentOptions.map((option) => (
+                              <option key={'depart-' + option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                      </select>
+                    </label>
+                  </div>
+                  <div className="filter-group">
+                    <label>
+                      <span>Arrivee (estimation)</span>
+                      <select
+                        value={estimationArrival}
+                        onChange={(e) => {
+                          setEstimationArrival(e.target.value);
+                          setPage(1);
+                        }}
+                      >
+                        <option value="">Selectionner</option>
+                        {popularDepartmentOptions.length > 0 && (
+                          <optgroup key="popular-arrival-departments" label="Departements les plus utilises">
+                            {popularDepartmentOptions.map((option) => (
+                              <option key={'arrivee-' + option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {otherDepartmentOptions.length > 0 && (
+                          <optgroup key="other-arrival-departments" label="Tous les departements">
+                            {otherDepartmentOptions.map((option) => (
+                              <option key={'arrivee-' + option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                      </select>
+                    </label>
+                  </div>
+                  <div className="filter-group filter-group--full">
+                    <SearchableMultiSelect
+                      label="Options supplementaires"
+                      options={SUPPLEMENTARY_OPTIONS}
+                      selectedValues={formState.supplementaryOptions}
+                      onChange={(values) => updateFormState('supplementaryOptions', values)}
+                    />
+                  </div>
+                </div>
+                <div className="estimation-info">
+                  {appliedDistanceKm ? (
+                    <span>
+                      Distance estimee : <strong>{appliedDistanceKm.toFixed(1)} km</strong>
+                      {meta?.estimatedDistanceSource === 'departments' && ' (calcul automatique)'}
+                      {meta?.estimatedDistanceSource === 'manual' && ' (distance saisie)'}
+                    </span>
+                  ) : (
+                    <span>Saisissez une distance ou selectionnez depart/arrivee</span>
+                  )}
+                </div>
               </div>
-              <div className="filter-group">
-                <label>
-                  <span>Nombre de palettes</span>
-                  <input
-                    type="number"
-                    min="1"
-                    max="33"
-                    step="1"
-                    value={formState.palletCount}
-                    onChange={(e) => updateFormState('palletCount', e.target.value)}
-                  />
-                </label>
+              <div className="filters-subsection filters-subsection--cargo">
+                <h3>Description marchandise</h3>
+                <div className="filters-grid">
+                  <div className="filter-group">
+                    <label>
+                      <span>Nombre de palettes</span>
+                      <input
+                        type="number"
+                        min="1"
+                        max="33"
+                        step="1"
+                        value={formState.palletCount}
+                        onChange={(e) => updateFormState('palletCount', e.target.value)}
+                      />
+                    </label>
+                  </div>
+                  <div className="filter-group">
+                    <label>
+                      <span>Metres de palette</span>
+                      <select
+                        value={formState.palletMeters}
+                        onChange={(e) => {
+                          updateFormState('palletMeters', e.target.value);
+                          if (e.target.value) {
+                            const matched = palletMeterOptions.find((option) => option.value === e.target.value);
+                            if (matched && Number.isFinite(matched.palletCount)) {
+                              updateFormState('palletCount', String(matched.palletCount));
+                            }
+                          }
+                        }}
+                      >
+                        <option value="">Selectionner</option>
+                        {palletMeterOptions.map((option) => (
+                          <option key={'meter-' + option.value} value={option.value}>
+                            {option.label}
+                            {option.palletCount ? ' (approx. ' + option.palletCount + ' palettes)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    {selectedPalletMeterOption?.palletCount && (
+                      <small className="helper-text">
+                        approx.{' '}
+                        {selectedPalletMeterOption.palletCount.toLocaleString('fr-FR')}{' '}
+                        palette{selectedPalletMeterOption.palletCount > 1 ? 's' : ''}
+                      </small>
+                    )}
+                  </div>
+                  <div className="filter-group">
+                    <label>
+                      <span>Poids (kg)</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={formState.weightKg}
+                        onChange={(e) => updateFormState('weightKg', e.target.value)}
+                      />
+                    </label>
+                  </div>
+                </div>
               </div>
-              <div className="filter-group">
-                <label>
-                  <span>Metres de palette</span>
-                  <select
-                    value={formState.palletMeters}
-                    onChange={(e) => {
-                      updateFormState('palletMeters', e.target.value);
-                      if (e.target.value) {
-                        const matched = palletMeterOptions.find((option) => option.value === e.target.value);
-                        if (matched && Number.isFinite(matched.palletCount)) {
-                          updateFormState('palletCount', String(matched.palletCount));
-                        }
-                      }
-                    }}
-                  >
-                    <option value="">Selectionner</option>
-                    {palletMeterOptions.map((option) => (
-                      <option key={`meter-${option.value}`} value={option.value}>
-                        {option.label}
-                        {option.palletCount ? ` (approx. ${option.palletCount} palettes)` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                {selectedPalletMeterOption?.palletCount && (
-                  <small className="helper-text">
-                    approx.{' '}
-                    {selectedPalletMeterOption.palletCount.toLocaleString('fr-FR')}{' '}
-                    palette{selectedPalletMeterOption.palletCount > 1 ? 's' : ''}
-                  </small>
-                )}
-              </div>
+            </div>
 
+            <div className="filters-extra">
               <div className="filter-group">
                 <label>
-                  <span>Prix max (â‚¬)</span>
+                  <span>Prix max (EUR)</span>
                   <input
                     type="number"
                     min="0"
@@ -1021,106 +1116,18 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                   />
                 </label>
               </div>
-            </div>
-
-            <div className="filters-dropdowns">
-              />
-
-              <SearchableMultiSelect
-                label="Services & Ã‰quipements"
-                options={FEATURE_GROUP_DEFINITIONS.flatMap(group => 
-                  group.keys.map(key => ({ 
-                    value: key, 
-                    label: FEATURE_LABELS[key] 
-                  }))
-                )}
-                selectedValues={formState.features}
-                onChange={(values) => updateFormState('features', values)}
-              />
-
-              <SearchableMultiSelect
-                label="Options supplementaires"
-                options={SUPPLEMENTARY_OPTIONS}
-                selectedValues={formState.supplementaryOptions}
-                onChange={(values) => updateFormState('supplementaryOptions', values)}
-              />
-            </div>
-
-            <div className="estimation-controls">
-              <div className="filter-group">
-                <label>
-                  <span>DÃ©part (estimation)</span>
-                  <select
-                    value={estimationDeparture}
-                    onChange={(e) => {
-                      setEstimationDeparture(e.target.value);
-                      setPage(1);
-                    }}
-                  >
-                    <option value="">SÃ©lectionner</option>
-                    {popularDepartmentOptions.length > 0 && (
-                      <optgroup key="popular-departments" label="DÃ©partements les plus utilisÃ©s">
-                        {popularDepartmentOptions.map((option) => (
-                          <option key={`depart-${option.value}`} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </optgroup>
-                    )}
-                    {otherDepartmentOptions.length > 0 && (
-                      <optgroup key="other-departments" label="Tous les dÃ©partements">
-                        {otherDepartmentOptions.map((option) => (
-                          <option key={`depart-${option.value}`} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </optgroup>
-                    )}
-                  </select>
-                </label>
-              </div>
-              <div className="filter-group">
-                <label>
-                  <span>ArrivÃ©e (estimation)</span>
-                  <select
-                    value={estimationArrival}
-                    onChange={(e) => {
-                      setEstimationArrival(e.target.value);
-                      setPage(1);
-                    }}
-                  >
-                    <option value="">SÃ©lectionner</option>
-                    {popularDepartmentOptions.length > 0 && (
-                      <optgroup key="popular-arrival-departments" label="DÃ©partements les plus utilisÃ©s">
-                        {popularDepartmentOptions.map((option) => (
-                          <option key={`arrivee-${option.value}`} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </optgroup>
-                    )}
-                    {otherDepartmentOptions.length > 0 && (
-                      <optgroup key="other-arrival-departments" label="Tous les dÃ©partements">
-                        {otherDepartmentOptions.map((option) => (
-                          <option key={`arrivee-${option.value}`} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </optgroup>
-                    )}
-                  </select>
-                </label>
-              </div>
-              <div className="estimation-info">
-                {appliedDistanceKm ? (
-                  <span>
-                    Distance estimÃ©e : <strong>{appliedDistanceKm.toFixed(1)} km</strong>
-                    {meta?.estimatedDistanceSource === 'departments' && ' (calcul automatique)'}
-                    {meta?.estimatedDistanceSource === 'manual' && ' (distance saisie)'}
-                  </span>
-                ) : (
-                  <span>Saisissez une distance ou sÃ©lectionnez dÃ©part/arrivÃ©e</span>
-                )}
+              <div className="filter-group filter-group--full">
+                <SearchableMultiSelect
+                  label="Services & Equipements"
+                  options={FEATURE_GROUP_DEFINITIONS.flatMap(group =>
+                    group.keys.map((key) => ({
+                      value: key,
+                      label: FEATURE_LABELS[key],
+                    }))
+                  )}
+                  selectedValues={formState.features}
+                  onChange={(values) => updateFormState('features', values)}
+                />
               </div>
             </div>
             <div className="filters-actions">
