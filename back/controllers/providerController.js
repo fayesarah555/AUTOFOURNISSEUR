@@ -312,15 +312,39 @@ const applyFilters = (items, filters) =>
         .filter(Boolean)
     );
 
+    const shouldLogIdfChecks =
+      filters.requiresIdfTariff ||
+      (filters.arrivalDepartment && IDF_DEPARTMENT_CODES.has(filters.arrivalDepartment));
+
+    const logIdfDecision = (reason, extra = {}) => {
+      if (!shouldLogIdfChecks) {
+        return;
+      }
+      console.debug('[providers][filter][idf]', {
+        reason,
+        providerId: item.id || null,
+        providerName: item.name || null,
+        providerDepartment: normalizeDepartmentFilter(item.profile?.department) || null,
+        pickupDepartments: normalizeDepartmentList(item.profile?.pickupDepartments || []),
+        deliveryDepartments: normalizeDepartmentList(item.profile?.deliveryDepartments || []),
+        pricingSource: item.pricing?.source || null,
+        departureDepartment: filters.departureDepartment || null,
+        arrivalDepartment: filters.arrivalDepartment || null,
+        ...extra,
+      });
+    };
+
 
 
     if (filters.requireWeightMatch && !item.meetsWeight) {
+      logIdfDecision('rejected-weight-mismatch');
       return false;
     }
 
     if (filters.features.length > 0) {
       const hasFeatures = filters.features.every((feature) => combinedFeatureSet.has(feature));
       if (!hasFeatures) {
+        logIdfDecision('rejected-missing-feature', { requiredFeatures: filters.features });
         return false;
       }
     }
@@ -330,6 +354,9 @@ const applyFilters = (items, filters) =>
         matchesSupplementaryOption(option, item, combinedFeatureSet)
       );
       if (!matchesAllSupplementary) {
+        logIdfDecision('rejected-missing-supplementary-option', {
+          requiredSupplementaryOptions: filters.supplementaryOptions,
+        });
         return false;
       }
     }
@@ -343,6 +370,7 @@ const applyFilters = (items, filters) =>
       );
 
       if (!departureTargets.has(filters.departureDepartment)) {
+        logIdfDecision('rejected-departure-mismatch', { departureTargets: Array.from(departureTargets) });
         return false;
       }
     }
@@ -353,6 +381,7 @@ const applyFilters = (items, filters) =>
       );
 
       if (!arrivalTargets.has(filters.arrivalDepartment)) {
+        logIdfDecision('rejected-arrival-mismatch', { arrivalTargets: Array.from(arrivalTargets) });
         return false;
       }
     }
@@ -364,6 +393,7 @@ const applyFilters = (items, filters) =>
     if (requiresIdfTariff) {
       const pricingSource = (item.pricing?.source || '').toLowerCase();
       if (pricingSource !== 'idf') {
+        logIdfDecision('rejected-non-idf-pricing', { pricingSource });
         return false;
       }
     }
@@ -371,6 +401,7 @@ const applyFilters = (items, filters) =>
     if (filters.arrivalDepartment && IDF_DEPARTMENT_CODES.has(filters.arrivalDepartment)) {
       const providerDepartment = normalizeDepartmentFilter(item.profile?.department);
       if (!providerDepartment || !IDF_DEPARTMENT_CODES.has(providerDepartment)) {
+        logIdfDecision('rejected-provider-not-idf', { providerDepartment });
         return false;
       }
     }
@@ -378,10 +409,12 @@ const applyFilters = (items, filters) =>
     if (typeof filters.palletMeters === 'number') {
       const providerMeters = sanitizeNumber(item.pricing?.palletMpl);
       if (typeof providerMeters !== 'number' || providerMeters < filters.palletMeters) {
+        logIdfDecision('rejected-pallet-meters', { providerMeters, requiredMeters: filters.palletMeters });
         return false;
       }
     }
 
+    logIdfDecision('accepted');
     return true;
   });
 
@@ -493,6 +526,21 @@ const listProviders = async (req, res, next) => {
       departureDepartment: normalizedDepartureDepartment,
       arrivalDepartment: normalizedArrivalDepartment,
     };
+
+    filters.requiresIdfTariff =
+      (filters.departureDepartment && IDF_DEPARTMENT_CODES.has(filters.departureDepartment)) ||
+      (filters.arrivalDepartment && IDF_DEPARTMENT_CODES.has(filters.arrivalDepartment));
+
+    console.info('[providers] listProviders query', {
+      query: filters.query,
+      departure: filters.departureDepartment,
+      arrival: filters.arrivalDepartment,
+      requiresIdfTariff: filters.requiresIdfTariff,
+      palletCount: filters.palletCount,
+      weightKg,
+      supplementaryOptions: filters.supplementaryOptions,
+      featuresCount: filters.features.length,
+    });
 
     const manualDistanceKm = sanitizeNumber(distanceKm);
     const autoDistanceKm =
