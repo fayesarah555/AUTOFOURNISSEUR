@@ -840,18 +840,9 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
         params.q = trimmedQuery;
       }
 
-      addListParam('coverage', appliedFilters.coverage);
       addListParam('features', appliedFilters.features);
       addListParam('supplementaryOptions', appliedFilters.supplementaryOptions);
-      addListParam('contractFlexibility', appliedFilters.contractFlexibility);
-      addListParam('deliveryDepartments', appliedFilters.deliveryDepartments);
-      addListParam('pickupDepartments', appliedFilters.pickupDepartments);
 
-      addNumberParam('minRating', appliedFilters.minRating);
-      addNumberParam('minOnTimeRate', appliedFilters.minOnTimeRate);
-      addNumberParam('maxLeadTime', appliedFilters.maxLeadTime);
-      addNumberParam('maxCo2', appliedFilters.maxCo2);
-      addNumberParam('maxPrice', appliedFilters.maxPrice);
       addNumberParam('palletCount', appliedFilters.palletCount);
       addNumberParam('palletMeters', appliedFilters.palletMeters);
       addNumberParam('weightKg', appliedFilters.weightKg);

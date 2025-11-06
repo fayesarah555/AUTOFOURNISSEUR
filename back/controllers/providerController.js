@@ -23,6 +23,8 @@ const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 50;
 const PAGE_SIZE_OPTIONS = [10, 20, 30, 50];
 
+const IDF_DEPARTMENT_CODES = new Set(['75', '77', '78', '91', '92', '93', '94', '95']);
+
 const SUPPLEMENTARY_OPTIONS = [
   { value: 'hayon', label: 'Hayon' },
   { value: 'prise-rdv', label: 'Prise de RDV' },
@@ -312,64 +314,8 @@ const applyFilters = (items, filters) =>
 
 
 
-    if (filters.coverages.length > 0 && !filters.coverages.includes(item.coverage.toLowerCase())) {
-      return false;
-    }
-
-
-    if (
-      filters.services.length > 0 &&
-      !filters.services.every((service) =>
-        item.serviceCapabilities.map((cap) => cap.toLowerCase()).includes(service)
-      )
-    ) {
-      return false;
-    }
-
-    if (
-      filters.certifications.length > 0 &&
-      !filters.certifications.every((cert) =>
-        item.certifications.map((value) => value.toLowerCase()).includes(cert)
-      )
-    ) {
-      return false;
-    }
-
-    if (typeof filters.minRating === 'number' && item.customerSatisfaction < filters.minRating) {
-      return false;
-    }
-
-    if (typeof filters.minOnTimeRate === 'number' && item.onTimeRate < filters.minOnTimeRate) {
-      return false;
-    }
-
-    if (typeof filters.maxLeadTime === 'number' && item.leadTimeDays > filters.maxLeadTime) {
-      return false;
-    }
-
-    if (typeof filters.maxCo2 === 'number' && item.co2GramsPerTonneKm > filters.maxCo2) {
-      return false;
-    }
-
-    if (
-      filters.flexibilities.length > 0 &&
-      !filters.flexibilities.includes(item.contractFlexibility.toLowerCase())
-    ) {
-      return false;
-    }
-
     if (filters.requireWeightMatch && !item.meetsWeight) {
       return false;
-    }
-
-    if (typeof filters.maxPrice === 'number') {
-      if (typeof item.estimatedCost === 'number') {
-        if (item.estimatedCost > filters.maxPrice) {
-          return false;
-        }
-      } else if (item.pricePerKm > filters.maxPrice) {
-        return false;
-      }
     }
 
     if (filters.features.length > 0) {
@@ -388,31 +334,12 @@ const applyFilters = (items, filters) =>
       }
     }
 
-    if (filters.deliveryDepartments.length > 0) {
-      const deliveries = new Set(item.profile?.deliveryDepartments || []);
-      const matches = filters.deliveryDepartments.some((department) => deliveries.has(department));
-      if (!matches) {
-        return false;
-      }
-    }
-
-    if (filters.pickupDepartments.length > 0) {
-      const pickups = new Set(item.profile?.pickupDepartments || []);
-      const matches = filters.pickupDepartments.some((department) => pickups.has(department));
-      if (!matches) {
-        return false;
-      }
-    }
-
     if (filters.departureDepartment) {
       const departureTargets = new Set(
         [
-          item.profile?.department,
-          ...(item.profile?.pickupDepartments || []),
-          item.pricing?.departureDepartment,
-        ]
-          .filter(Boolean)
-          .map((value) => value.toString().toUpperCase())
+          normalizeDepartmentFilter(item.profile?.department),
+          ...normalizeDepartmentList(item.profile?.pickupDepartments || []),
+        ].filter(Boolean)
       );
 
       if (!departureTargets.has(filters.departureDepartment)) {
@@ -422,15 +349,28 @@ const applyFilters = (items, filters) =>
 
     if (filters.arrivalDepartment) {
       const arrivalTargets = new Set(
-        [
-          ...(item.profile?.deliveryDepartments || []),
-          item.pricing?.arrivalDepartment,
-        ]
-          .filter(Boolean)
-          .map((value) => value.toString().toUpperCase())
+        normalizeDepartmentList(item.profile?.deliveryDepartments || [])
       );
 
       if (!arrivalTargets.has(filters.arrivalDepartment)) {
+        return false;
+      }
+    }
+
+    const requiresIdfTariff =
+      (filters.departureDepartment && IDF_DEPARTMENT_CODES.has(filters.departureDepartment)) ||
+      (filters.arrivalDepartment && IDF_DEPARTMENT_CODES.has(filters.arrivalDepartment));
+
+    if (requiresIdfTariff) {
+      const pricingSource = (item.pricing?.source || '').toLowerCase();
+      if (pricingSource !== 'idf') {
+        return false;
+      }
+    }
+
+    if (filters.arrivalDepartment && IDF_DEPARTMENT_CODES.has(filters.arrivalDepartment)) {
+      const providerDepartment = normalizeDepartmentFilter(item.profile?.department);
+      if (!providerDepartment || !IDF_DEPARTMENT_CODES.has(providerDepartment)) {
         return false;
       }
     }
@@ -455,19 +395,34 @@ const sortProviders = (items, sortBy, sortOrder) => {
       return bPriority - aPriority;
     }
 
+    const fallbackValue =
+      orderMultiplier === -1 ? Number.NEGATIVE_INFINITY : Number.POSITIVE_INFINITY;
+    const resolveNumber = (value) =>
+      Number.isFinite(value) ? value : fallbackValue;
+
     const getComparableValue = (provider) => {
       switch (sortBy) {
         case 'estimatedCost': {
           const value = Number(provider.estimatedCost);
-          return Number.isFinite(value) ? value : Number.MAX_VALUE;
+          return resolveNumber(value);
         }
         case 'pricePerKm': {
           const value = Number(provider.pricePerKm ?? provider.pricing?.pricePerKm);
-          return Number.isFinite(value) ? value : Number.MAX_VALUE;
+          return resolveNumber(value);
+        }
+        case 'score': {
+          const value = Number(provider.score);
+          return resolveNumber(value);
         }
         default: {
           const value = provider[sortBy];
-          return typeof value === 'number' && Number.isFinite(value) ? value : Number.MAX_VALUE;
+          if (typeof value === 'number') {
+            return resolveNumber(value);
+          }
+          if (typeof value === 'string') {
+            return resolveNumber(Number(value));
+          }
+          return fallbackValue;
         }
       }
     };
@@ -487,18 +442,9 @@ const listProviders = async (req, res, next) => {
   try {
     const {
       q,
-      coverage,
-      services,
-      certifications,
-      minRating,
-      minOnTimeRate,
-      maxLeadTime,
-      maxCo2,
-      contractFlexibility,
       requireWeightMatch,
-      maxPrice,
-      sortBy = 'estimatedCost',
-      sortOrder = 'asc',
+      sortBy = 'score',
+      sortOrder = 'desc',
       page = 1,
       pageSize = DEFAULT_PAGE_SIZE,
       weightKg,
@@ -527,10 +473,6 @@ const listProviders = async (req, res, next) => {
     }
     const filters = {
       query: typeof q === 'string' ? q.trim().toLowerCase() : '',
-      coverages: parseCsv(coverage).map((value) => value.toLowerCase()),
-      services: parseCsv(services).map((value) => value.toLowerCase()),
-      certifications: parseCsv(certifications).map((value) => value.toLowerCase()),
-      flexibilities: parseCsv(contractFlexibility).map((value) => value.toLowerCase()),
       features: parseCsv(req.query.features).map((value) => value.toLowerCase()),
       supplementaryOptions: Array.from(
         new Set(
@@ -539,11 +481,6 @@ const listProviders = async (req, res, next) => {
             .filter((value) => SUPPLEMENTARY_OPTIONS.some((option) => option.value === value))
         )
       ),
-      minRating: sanitizeNumber(minRating),
-      minOnTimeRate: sanitizeNumber(minOnTimeRate),
-      maxLeadTime: sanitizeNumber(maxLeadTime),
-      maxCo2: sanitizeNumber(maxCo2),
-      maxPrice: sanitizeNumber(maxPrice),
       palletCount:
         typeof effectivePalletCount === 'number' && Number.isFinite(effectivePalletCount)
           ? effectivePalletCount
@@ -553,12 +490,6 @@ const listProviders = async (req, res, next) => {
           ? Number(requestedPalletMeters.toFixed(3))
           : null,
       requireWeightMatch: requireWeightMatch === 'true',
-      deliveryDepartments: parseCsv(req.query.deliveryDepartments)
-        .map(normalizeDepartmentFilter)
-        .filter(Boolean),
-      pickupDepartments: parseCsv(req.query.pickupDepartments)
-        .map(normalizeDepartmentFilter)
-        .filter(Boolean),
       departureDepartment: normalizedDepartureDepartment,
       arrivalDepartment: normalizedArrivalDepartment,
     };
@@ -636,6 +567,7 @@ const listProviders = async (req, res, next) => {
     const availablePalletMeters = getAvailablePaletteMeters();
 
     const sortableFields = new Set([
+      'score',
       'pricePerKm',
       'estimatedCost',
       'leadTimeDays',
@@ -645,7 +577,7 @@ const listProviders = async (req, res, next) => {
       'baseHandlingFee',
     ]);
 
-    const resolvedSortField = sortableFields.has(sortBy) ? sortBy : 'estimatedCost';
+    const resolvedSortField = sortableFields.has(sortBy) ? sortBy : 'score';
     const resolvedSortOrder = sortOrder === 'asc' ? 'asc' : 'desc';
 
     const sorted = sortProviders(prioritized, resolvedSortField, resolvedSortOrder);
