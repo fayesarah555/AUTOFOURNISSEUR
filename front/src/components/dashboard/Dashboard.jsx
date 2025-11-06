@@ -1028,6 +1028,19 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                       onChange={(values) => updateFormState('supplementaryOptions', values)}
                     />
                   </div>
+                  <div className="filter-group filter-group--full">
+                    <SearchableMultiSelect
+                      label="Services & Equipements"
+                      options={FEATURE_GROUP_DEFINITIONS.flatMap(group =>
+                        group.keys.map((key) => ({
+                          value: key,
+                          label: FEATURE_LABELS[key],
+                        }))
+                      )}
+                      selectedValues={formState.features}
+                      onChange={(values) => updateFormState('features', values)}
+                    />
+                  </div>
                 </div>
                 <div className="estimation-info">
                   {appliedDistanceKm ? (
@@ -1101,33 +1114,6 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                     </label>
                   </div>
                 </div>
-              </div>
-            </div>
-
-            <div className="filters-extra">
-              <div className="filter-group">
-                <label>
-                  <span>Prix max (EUR)</span>
-                  <input
-                    type="number"
-                    min="0"
-                    value={formState.maxPrice}
-                    onChange={(e) => updateFormState('maxPrice', e.target.value)}
-                  />
-                </label>
-              </div>
-              <div className="filter-group filter-group--full">
-                <SearchableMultiSelect
-                  label="Services & Equipements"
-                  options={FEATURE_GROUP_DEFINITIONS.flatMap(group =>
-                    group.keys.map((key) => ({
-                      value: key,
-                      label: FEATURE_LABELS[key],
-                    }))
-                  )}
-                  selectedValues={formState.features}
-                  onChange={(values) => updateFormState('features', values)}
-                />
               </div>
             </div>
             <div className="filters-actions">
