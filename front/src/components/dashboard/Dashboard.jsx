@@ -32,15 +32,15 @@ const FEATURE_LABELS = {
   'semi-fourgon': 'Semi fourgon',
   'semi-frigorifique': 'Semi frigorifique',
   'semi-hayon': 'Semi hayon',
-  'porteur-tole': 'Porteur tÃ´lÃ©',
+  'porteur-tole': 'Porteur tôlé',
   'porteur-taut': 'Porteur tautliner',
   'porteur-hayon': 'Porteur hayon',
-  'vehicule-leger': 'VÃ©hicule lÃ©ger',
+  'vehicule-leger': 'Véhicule léger',
   express: 'Express',
   adr: 'ADR',
   international: 'International',
   grue: 'Grue',
-  'chariot-embarque': 'Chariot embarquÃ©',
+  'chariot-embarque': 'Chariot embarqué',
   fosse: 'Fosse',
   'porte-char': 'Porte-char',
   'convoi-exceptionnel': 'Convoi exceptionnel',
@@ -63,7 +63,7 @@ const FEATURE_GROUP_DEFINITIONS = [
     keys: ['grue', 'chariot-embarque', 'fosse'],
   },
   {
-    label: 'Options & spÃ©cialitÃ©s',
+    label: 'Options & spécialités',
     keys: ['express', 'adr', 'porte-char', 'convoi-exceptionnel', 'international', 'prise-rdv', 'chgt-au-pont'],
   },
 ];
@@ -233,10 +233,10 @@ const SearchableMultiSelect = ({ label, options, selectedValues, onChange, place
         <span className="select-label">{label}</span>
         <span className="select-value">
           {selectedValues.length > 0
-            ? `${selectedValues.length} sÃ©lectionnÃ©(s)`
+            ? `${selectedValues.length} sélectionné(s)`
             : placeholder || (isDisabled ? 'Indisponible' : 'Tous')}
         </span>
-        <span className={`select-arrow ${isOpen ? 'open' : ''}`}>â–¼</span>
+        <span className={`select-arrow ${isOpen ? 'open' : ''}`}>▼</span>
       </button>
 
       {isOpen && !isDisabled && (
@@ -252,7 +252,7 @@ const SearchableMultiSelect = ({ label, options, selectedValues, onChange, place
           </div>
           <div className="select-options">
             {filteredOptions.length === 0 ? (
-              <div className="select-no-results">Aucun rÃ©sultat</div>
+              <div className="select-no-results">Aucun résultat</div>
             ) : (
               filteredOptions.map((option) => (
                 <label key={option.value} className="select-option">
@@ -283,8 +283,8 @@ const SearchableMultiSelect = ({ label, options, selectedValues, onChange, place
   );
 };
 
-// Note: Le reste du code du Dashboard original doit Ãªtre copiÃ© ici
-// Je vais crÃ©er une version simplifiÃ©e qui montre les changements principaux
+// Note: Le reste du code du Dashboard original doit être copié ici
+// Je vais créer une version simplifiée qui montre les changements principaux
 
 const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
   const isAuthenticated = Boolean(user);
@@ -317,7 +317,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
     provider: null,
   });
 
-  // Fonction pour mettre Ã  jour les filtres
+  // Fonction pour mettre à jour les filtres
   const updateFormState = (key, value) => {
     setFormState(prev => ({ ...prev, [key]: value }));
   };
@@ -328,8 +328,8 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
       return;
     }
 
-    // TODO: ouvrir le module de crÃ©ation de fournisseur
-    console.info('Ouverture du module de crÃ©ation de fournisseur (Ã  implÃ©menter)');
+    // TODO: ouvrir le module de création de fournisseur
+    console.info('Ouverture du module de création de fournisseur (à implémenter)');
   }, [isAuthenticated, onLoginRequest]);
 
   const effectivePageSizeOptions = useMemo(() => {
@@ -344,7 +344,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
     const codes = meta?.availableFilters?.deliveryDepartments || [];
     return codes.map((code) => ({
       value: code,
-      label: `${code} - ${FRENCH_DEPARTMENT_NAMES[code] || 'DÃ©partement ' + code}`,
+      label: `${code} - ${FRENCH_DEPARTMENT_NAMES[code] || 'Département ' + code}`,
     }));
   }, [meta]);
 
@@ -352,7 +352,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
     const codes = meta?.availableFilters?.pickupDepartments || [];
     return codes.map((code) => ({
       value: code,
-      label: `${code} - ${FRENCH_DEPARTMENT_NAMES[code] || 'DÃ©partement ' + code}`,
+      label: `${code} - ${FRENCH_DEPARTMENT_NAMES[code] || 'Département ' + code}`,
     }));
   }, [meta]);
 
@@ -664,7 +664,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
 
       const departureDepartment = gridData.meta?.departureDepartment;
       const title = `Grille tarifaire ${provider.name || ''}`.trim() || 'Grille tarifaire';
-      const subtitle = departureDepartment ? `Depart : ${departureDepartment}` : '';
+      const subtitle = departureDepartment ? `Dpart : ${departureDepartment}` : '';
       const gridHtml = `
         <div class="tariff-grid printable">
           <div class="tariff-grid__meta">
@@ -884,7 +884,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
         }
 
         console.error('Erreur lors du chargement des transporteurs', err);
-        setError("Impossible de charger les transporteurs. RÃ©essayez plus tard.");
+        setError("Impossible de charger les transporteurs. Réessayez plus tard.");
         setProviders([]);
         setMeta(null);
       } finally {
@@ -909,7 +909,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
           <h1>Comparateur Transporteurs</h1>
           <div className="header-stats">
             <span>
-              <strong>{meta?.total ?? providers.length}</strong> RÃ©sultat{(meta?.total ?? providers.length) > 1 ? 's' : ''}
+              <strong>{meta?.total ?? providers.length}</strong> Résultat{(meta?.total ?? providers.length) > 1 ? 's' : ''}
             </span>
             {meta?.page && (
               <span>
@@ -929,12 +929,12 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
             className={`btn-create ${isAuthenticated ? 'btn-create--active' : 'btn-create--login'}`}
             onClick={handleCreateRequest}
           >
-            {isAuthenticated ? 'CrÃ©er un fournisseur' : 'Se connecter pour crÃ©er'}
+            {isAuthenticated ? 'Créer un fournisseur' : 'Se connecter pour créer'}
           </button>
           <div className={`header-user ${isAuthenticated ? '' : 'header-user--anonymous'}`}>
             <span>{isAuthenticated ? displayName : 'Consultation libre'}</span>
             {isAuthenticated && onLogout && (
-              <button onClick={onLogout}>DÃ©connexion</button>
+              <button onClick={onLogout}>Déconnexion</button>
             )}
           </div>
         </div>
@@ -947,7 +947,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
           onClick={() => setFiltersExpanded(!filtersExpanded)}
         >
           <span>Filtres de recherche</span>
-          <span className={`toggle-icon ${filtersExpanded ? 'expanded' : ''}`}>â–¼</span>
+          <span className={`toggle-icon ${filtersExpanded ? 'expanded' : ''}`}>▼</span>
         </button>
 
         {filtersExpanded && (
@@ -958,7 +958,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                 <div className="filters-grid">
                   <div className="filter-group">
                     <label>
-                      <span>Depart (estimation)</span>
+                      <span>Dpart (estimation)</span>
                       <select
                         value={estimationDeparture}
                         onChange={(e) => {
@@ -966,9 +966,9 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                           setPage(1);
                         }}
                       >
-                        <option value="">Selectionner</option>
+                        <option value="">Slectionner</option>
                         {popularDepartmentOptions.length > 0 && (
-                          <optgroup key="popular-departments" label="Departements les plus utilises">
+                          <optgroup key="popular-departments" label="Dpartements les plus utiliss">
                             {popularDepartmentOptions.map((option) => (
                               <option key={'depart-' + option.value} value={option.value}>
                                 {option.label}
@@ -977,7 +977,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                           </optgroup>
                         )}
                         {otherDepartmentOptions.length > 0 && (
-                          <optgroup key="other-departments" label="Tous les departements">
+                          <optgroup key="other-departments" label="Tous les dpartements">
                             {otherDepartmentOptions.map((option) => (
                               <option key={'depart-' + option.value} value={option.value}>
                                 {option.label}
@@ -990,7 +990,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                   </div>
                   <div className="filter-group">
                     <label>
-                      <span>Arrivee (estimation)</span>
+                      <span>Arrive (estimation)</span>
                       <select
                         value={estimationArrival}
                         onChange={(e) => {
@@ -998,9 +998,9 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                           setPage(1);
                         }}
                       >
-                        <option value="">Selectionner</option>
+                        <option value="">Slectionner</option>
                         {popularDepartmentOptions.length > 0 && (
-                          <optgroup key="popular-arrival-departments" label="Departements les plus utilises">
+                          <optgroup key="popular-arrival-departments" label="Dpartements les plus utiliss">
                             {popularDepartmentOptions.map((option) => (
                               <option key={'arrivee-' + option.value} value={option.value}>
                                 {option.label}
@@ -1009,7 +1009,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                           </optgroup>
                         )}
                         {otherDepartmentOptions.length > 0 && (
-                          <optgroup key="other-arrival-departments" label="Tous les departements">
+                          <optgroup key="other-arrival-departments" label="Tous les dpartements">
                             {otherDepartmentOptions.map((option) => (
                               <option key={'arrivee-' + option.value} value={option.value}>
                                 {option.label}
@@ -1022,7 +1022,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                   </div>
                   <div className="filter-group filter-group--full">
                     <SearchableMultiSelect
-                      label="Options supplementaires"
+                      label="Options supplmentaires"
                       options={SUPPLEMENTARY_OPTIONS}
                       selectedValues={formState.supplementaryOptions}
                       onChange={(values) => updateFormState('supplementaryOptions', values)}
@@ -1030,8 +1030,8 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                   </div>
                   <div className="filter-group filter-group--full">
                     <SearchableMultiSelect
-                      label="Services & Equipements"
-                      options={FEATURE_GROUP_DEFINITIONS.flatMap(group =>
+                      label="Services & quipements"
+                      options={FEATURE_GROUP_DEFINITIONS.flatMap((group) =>
                         group.keys.map((key) => ({
                           value: key,
                           label: FEATURE_LABELS[key],
@@ -1045,12 +1045,12 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                 <div className="estimation-info">
                   {appliedDistanceKm ? (
                     <span>
-                      Distance estimee : <strong>{appliedDistanceKm.toFixed(1)} km</strong>
+                      Distance estime : <strong>{appliedDistanceKm.toFixed(1)} km</strong>
                       {meta?.estimatedDistanceSource === 'departments' && ' (calcul automatique)'}
                       {meta?.estimatedDistanceSource === 'manual' && ' (distance saisie)'}
                     </span>
                   ) : (
-                    <span>Saisissez une distance ou selectionnez depart/arrivee</span>
+                    <span>Saisissez une distance ou slectionnez dpart/arrive</span>
                   )}
                 </div>
               </div>
@@ -1072,7 +1072,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                   </div>
                   <div className="filter-group">
                     <label>
-                      <span>Metres de palette</span>
+                      <span>Mtres de palette</span>
                       <select
                         value={formState.palletMeters}
                         onChange={(e) => {
@@ -1085,7 +1085,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                           }
                         }}
                       >
-                        <option value="">Selectionner</option>
+                        <option value="">Slectionner</option>
                         {palletMeterOptions.map((option) => (
                           <option key={'meter-' + option.value} value={option.value}>
                             {option.label}
@@ -1132,14 +1132,14 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
         )}
       </section>
 
-      {/* Liste des fournisseurs - Prend maintenant la majoritÃ© de l'espace */}
+      {/* Liste des fournisseurs - Prend maintenant la majorité de l'espace */}
       <main className="providers-main">
         <section className="providers-list">
           <div className="list-header">
             <h2>Liste des transporteurs</h2>
             <div className="list-controls">
               <label className="control-inline">
-                <span>RÃ©sultats / page</span>
+                <span>Résultats / page</span>
                 <select
                   value={pageSize}
                   onChange={(e) => {
@@ -1159,7 +1159,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
           </div>
 
           <div className="results-table">
-            {/* Tableau des rÃ©sultats */}
+            {/* Tableau des résultats */}
             <div className="table-responsive">
               {error && (
                 <div className="empty-state error-state">
@@ -1173,7 +1173,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
               )}
               {!error && !loading && providers.length === 0 && (
                 <div className="empty-state">
-                  <p>Aucun transporteur trouvÃ© avec ces critÃ¨res</p>
+                  <p>Aucun transporteur trouvé avec ces critères</p>
                 </div>
               )}
               {!error && !loading && providers.length > 0 && (
@@ -1181,12 +1181,11 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                   <thead>
                     <tr>
                       <th>Transporteur</th>
-                      <th>DÃ©partement</th>
+                      <th>Dpartement</th>
                       <th>Contact</th>
-                      <th>TÃ©lÃ©phone</th>
-                      <th>Distance estimÃ©e</th>
+                      <th>Tlphone</th>
+                      <th>Distance estime</th>
                       <th>Grille tarif transporteur</th>
-                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1229,14 +1228,11 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                                 type="button"
                                 className="btn-tariff btn-tariff--pdf"
                                 onClick={() => handleExportTariffGridPdf(provider)}
-                                title="Telecharger la grille en PDF"
+                                title="Tlcharger la grille en PDF"
                               >
                                 PDF
                               </button>
                             </div>
-                          </td>
-                          <td>
-                            <button className="btn-compare">Comparer</button>
                           </td>
                         </tr>
                       );
@@ -1253,7 +1249,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                 onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
                 disabled={loading || !(meta?.hasPreviousPage)}
               >
-                PrÃ©cÃ©dent
+                Prcdent
               </button>
               <span>
                 Page {meta?.page ?? page} / {meta?.totalPages ?? Math.max(Math.ceil((meta?.total ?? providers.length) / pageSize), 1)}
@@ -1399,7 +1395,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                   )}
                   {tariffModal.type === 'remote' && !tariffModal.error && (
                     <p className="tariff-modal__hint">
-                      Le document est hÃ©bergÃ© sur un site externe. Utilisez le bouton d&apos;ouverture si l&apos;aperÃ§u ne s&apos;affiche pas.
+                      Le document est hébergé sur un site externe. Utilisez le bouton d&apos;ouverture si l&apos;aperçu ne s&apos;affiche pas.
                     </p>
                   )}
                 </>
@@ -1416,7 +1412,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                   rel="noopener noreferrer"
                   className="tariff-modal__btn tariff-modal__btn--primary"
                 >
-                  {tariffModal.type === 'remote' ? 'Ouvrir dans un nouvel onglet' : 'TÃ©lÃ©charger le PDF'}
+                  {tariffModal.type === 'remote' ? 'Ouvrir dans un nouvel onglet' : 'Télécharger le PDF'}
                 </a>
               )}
             </footer>
