@@ -763,20 +763,6 @@ body {
   background: var(--color-soft);
 }
 
-.providers-table tbody tr.best-result {
-  outline: 2px solid var(--color-positive);
-  outline-offset: -2px;
-  background: rgba(22, 163, 74, 0.08);
-}
-
-.providers-table tbody tr.best-result:hover {
-  background: rgba(22, 163, 74, 0.12);
-}
-
-.providers-table tbody tr.best-result strong {
-  color: var(--color-positive);
-}
-
 .providers-table td {
   padding: 16px;
   font-size: 0.875rem;

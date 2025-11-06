@@ -1195,7 +1195,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                       const phoneDisplay = provider.profile?.phone?.trim() || '--';
 
                       return (
-                        <tr key={provider.id} className={isBest ? 'best-result' : undefined}>
+                        <tr key={provider.id}>
                           <td>
                             <div className="provider-info">
                               <div className={`provider-name${provider.hasTariffDocument ? ' has-tariff' : ''}`}>
