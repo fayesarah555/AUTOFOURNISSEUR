@@ -286,6 +286,104 @@ const SearchableMultiSelect = ({ label, options, selectedValues, onChange, place
   );
 };
 
+const SearchableSingleSelect = ({
+  label,
+  options,
+  selectedValue,
+  onChange,
+  placeholder = 'Tous',
+  disabled,
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filteredOptions = useMemo(() => {
+    if (!searchTerm) {
+      return options;
+    }
+    const lower = searchTerm.toLowerCase();
+    return options.filter(
+      (option) =>
+        option.label.toLowerCase().includes(lower) ||
+        option.value.toLowerCase().includes(lower)
+    );
+  }, [options, searchTerm]);
+
+  const selectedLabel =
+    options.find((option) => option.value === selectedValue)?.label || '';
+
+  const isDisabled = disabled || options.length === 0;
+
+  const handleSelect = (value) => {
+    const next = value === selectedValue ? '' : value;
+    onChange(next);
+    setIsOpen(false);
+  };
+
+  return (
+    <div
+      className={`searchable-select ${isDisabled ? 'searchable-select--disabled' : ''}`}
+      ref={dropdownRef}
+    >
+      <button
+        type="button"
+        className="select-trigger"
+        onClick={() => !isDisabled && setIsOpen(!isOpen)}
+        disabled={isDisabled}
+      >
+        <span className="select-label">{label}</span>
+        <span className="select-value">
+          {selectedLabel || (isDisabled ? 'Indisponible' : placeholder)}
+        </span>
+        <span className={`select-arrow ${isOpen ? 'open' : ''}`}>▼</span>
+      </button>
+
+      {isOpen && !isDisabled && (
+        <div className="select-dropdown">
+          <div className="select-search">
+            <input
+              type="text"
+              placeholder="Rechercher..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+          <div className="select-options">
+            {filteredOptions.length === 0 ? (
+              <div className="select-no-results">Aucun résultat</div>
+            ) : (
+              filteredOptions.map((option) => (
+                <button
+                  type="button"
+                  key={`${label}-${option.value}`}
+                  className={`select-option-btn${
+                    option.value === selectedValue ? ' select-option-btn--active' : ''
+                  }`}
+                  onClick={() => handleSelect(option.value)}
+                >
+                  {option.label}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // Note: Le reste du code du Dashboard original doit être copié ici
 // Je vais créer une version simplifiée qui montre les changements principaux
 
@@ -305,8 +403,6 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
   const [error, setError] = useState(null);
   const [estimationDeparture, setEstimationDeparture] = useState('');
   const [estimationArrival, setEstimationArrival] = useState('');
-  const [departureInput, setDepartureInput] = useState('');
-  const [arrivalInput, setArrivalInput] = useState('');
   const [palletFormatInput, setPalletFormatInput] = useState('');
   const [tariffModal, setTariffModal] = useState({
     open: false,
@@ -371,59 +467,6 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
     });
     return Array.from(map.values()).sort((a, b) => a.value.localeCompare(b.value));
   }, [deliveryDepartmentOptions, pickupDepartmentOptions]);
-
-  useEffect(() => {
-    if (!estimationDeparture) {
-      setDepartureInput('');
-      return;
-    }
-    const matched = departmentOptionsAll.find((option) => option.value === estimationDeparture);
-    setDepartureInput(matched ? matched.label : estimationDeparture);
-  }, [estimationDeparture, departmentOptionsAll]);
-
-  useEffect(() => {
-    if (!estimationArrival) {
-      setArrivalInput('');
-      return;
-    }
-    const matched = departmentOptionsAll.find((option) => option.value === estimationArrival);
-    setArrivalInput(matched ? matched.label : estimationArrival);
-  }, [estimationArrival, departmentOptionsAll]);
-
-  const handleDepartmentInputChange = useCallback(
-    (value, applyValue) => {
-      const normalized = value.trim().toLowerCase();
-      if (!normalized) {
-        applyValue('');
-        setPage(1);
-        return;
-      }
-      const matched =
-        departmentOptionsAll.find((option) => option.value.toLowerCase() === normalized) ||
-        departmentOptionsAll.find((option) => option.label.toLowerCase() === normalized);
-      if (matched) {
-        applyValue(matched.value);
-        setPage(1);
-      }
-    },
-    [departmentOptionsAll, setPage]
-  );
-
-  const onDepartureInputChange = useCallback(
-    (value) => {
-      setDepartureInput(value);
-      handleDepartmentInputChange(value, setEstimationDeparture);
-    },
-    [handleDepartmentInputChange]
-  );
-
-  const onArrivalInputChange = useCallback(
-    (value) => {
-      setArrivalInput(value);
-      handleDepartmentInputChange(value, setEstimationArrival);
-    },
-    [handleDepartmentInputChange]
-  );
 
   const {
     palletFormatGroups,
@@ -1146,44 +1189,28 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                 <h3>Barre de recherche</h3>
                 <div className="filters-grid">
                   <div className="filter-group">
-                    <label>
-                      <span>Départ (estimation)</span>
-                      <input
-                        className="autocomplete-input"
-                        type="text"
-                        list="departures-datalist"
-                        placeholder="Code ou nom de département"
-                        value={departureInput}
-                        onChange={(e) => onDepartureInputChange(e.target.value)}
-                      />
-                      <datalist id="departures-datalist">
-                        {departmentOptionsAll.map((option) => (
-                          <option key={'depart-option-' + option.value} value={option.label}>
-                            {option.value}
-                          </option>
-                        ))}
-                      </datalist>
-                    </label>
+                    <SearchableSingleSelect
+                      label="Départ (estimation)"
+                      options={departmentOptionsAll}
+                      selectedValue={estimationDeparture}
+                      onChange={(value) => {
+                        setEstimationDeparture(value);
+                        setPage(1);
+                      }}
+                      placeholder="Tous les départements"
+                    />
                   </div>
                   <div className="filter-group">
-                    <label>
-                      <span>Arrivée (estimation)</span>
-                      <input
-                        className="autocomplete-input"
-                        type="text"
-                        list="arrivals-datalist"
-                        placeholder="Code ou nom de département"
-                        value={arrivalInput}
-                        onChange={(e) => onArrivalInputChange(e.target.value)}
-                      />
-                      <datalist id="arrivals-datalist">
-                        {departmentOptionsAll.map((option) => (
-                          <option key={'arrivee-option-' + option.value} value={option.label}>
-                            {option.value}
-                          </option>
-                        ))}
-                      </datalist>
-                    </label>
+                    <SearchableSingleSelect
+                      label="Arrivée (estimation)"
+                      options={departmentOptionsAll}
+                      selectedValue={estimationArrival}
+                      onChange={(value) => {
+                        setEstimationArrival(value);
+                        setPage(1);
+                      }}
+                      placeholder="Tous les départements"
+                    />
                   </div>
                   <div className="filter-group filter-group--full">
                     <SearchableMultiSelect
