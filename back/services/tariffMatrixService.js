@@ -84,6 +84,27 @@ const normalizeMeterValue = (value) => {
   return Number(Number(num).toFixed(3));
 };
 
+const formatDimensionLabel = (value) => {
+  if (value === undefined || value === null) {
+    return 'Autre format';
+  }
+  const trimmed = value.toString().trim();
+  if (!trimmed) {
+    return 'Autre format';
+  }
+  const normalized = trimmed.replace(/\s+/g, '').toLowerCase();
+  if (!normalized) {
+    return 'Autre format';
+  }
+  if (normalized.includes('x')) {
+    const [left, right] = normalized.split('x');
+    if (left && right) {
+      return `${left}x${right}`;
+    }
+  }
+  return trimmed;
+};
+
 const buildEquivalenceData = (sheet) => {
   if (!sheet) {
     return { meters: [], meterToCount: new Map() };
@@ -96,8 +117,9 @@ const buildEquivalenceData = (sheet) => {
 
   const meterKeys = new Set();
   const meterToCount = new Map();
+  const meterEntries = [];
 
-  const register = (meter, count, priority) => {
+  const register = (meter, count, tonnage, dimensionLabel, priority) => {
     if (!Number.isFinite(meter) || !Number.isFinite(count)) {
       return;
     }
@@ -106,7 +128,12 @@ const buildEquivalenceData = (sheet) => {
     if (!palletCount) {
       return;
     }
+    const normalizedTonnage = Number.isFinite(tonnage)
+      ? Number(Number(tonnage).toFixed(2))
+      : null;
+    const dimension = formatDimensionLabel(dimensionLabel);
     meterKeys.add(key);
+
     const existing = meterToCount.get(key);
     if (
       !existing ||
@@ -115,6 +142,14 @@ const buildEquivalenceData = (sheet) => {
     ) {
       meterToCount.set(key, { count: palletCount, priority });
     }
+
+    meterEntries.push({
+      dimension,
+      meter: key,
+      tonnage: normalizedTonnage,
+      palletCount,
+      priority,
+    });
   };
 
   const headerRowIndex = rows.length > 2 ? 2 : 0;
@@ -139,11 +174,12 @@ const buildEquivalenceData = (sheet) => {
 
     for (let rowIndex = headerRowIndex + 1; rowIndex < rows.length; rowIndex += 1) {
       const metreValue = normalizeMeterValue(rows[rowIndex]?.[columnIndex]);
+      const tonnageValue = safeNumber(rows[rowIndex]?.[columnIndex + 1]);
       const nombreValue = safeNumber(rows[rowIndex]?.[columnIndex + 2]);
       if (metreValue === null || nombreValue === null) {
         continue;
       }
-      register(metreValue, nombreValue, normalizedPriority);
+      register(metreValue, nombreValue, tonnageValue, dimensionHeader, normalizedPriority);
     }
   }
 
@@ -156,7 +192,22 @@ const buildEquivalenceData = (sheet) => {
     normalizedMap.set(key, value.count);
   });
 
-  return { meters, meterToCount: normalizedMap };
+  const normalizedEntries = meterEntries
+    .sort((a, b) => {
+      const dimensionCompare = a.dimension.localeCompare(b.dimension);
+      if (dimensionCompare !== 0) {
+        return dimensionCompare;
+      }
+      return a.palletCount - b.palletCount;
+    })
+    .map((entry) => ({
+      dimension: entry.dimension,
+      meter: entry.meter,
+      tonnage: entry.tonnage,
+      palletCount: entry.palletCount,
+    }));
+
+  return { meters, meterToCount: normalizedMap, entries: normalizedEntries };
 };
 
 const buildPaletteColumnMap = (headerRow, startIndex = 1) => {
@@ -402,6 +453,7 @@ const loadTariffData = () => {
       nonIdfShort: [],
       nonIdfLong: [],
       paletteMeters: [],
+      paletteEntries: [],
       meterToPalletCount: new Map(),
     };
     return cache;
@@ -427,6 +479,7 @@ const loadTariffData = () => {
     nonIdfShort,
     nonIdfLong,
     paletteMeters: equivalenceData.meters,
+    paletteEntries: equivalenceData.entries,
     meterToPalletCount: equivalenceData.meterToCount,
   };
 
@@ -655,9 +708,15 @@ module.exports = {
   getTariffGridForDeparture,
   getAvailablePaletteMeters: () => {
     const data = loadTariffData();
+    const entries = data.paletteEntries || [];
+    if (entries.length) {
+      return entries;
+    }
     const meters = data.paletteMeters || [];
     return meters.map((meter) => ({
+      dimension: 'Format',
       meter,
+      tonnage: null,
       palletCount: data.meterToPalletCount.get(meter) ?? null,
     }));
   },

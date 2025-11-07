@@ -14,6 +14,9 @@ const createEmptyFilters = () => ({
   contractFlexibility: [],
   maxPrice: '',
   palletCount: '',
+  palletFormat: '',
+  palletFormatOption: '',
+  palletBaseMeter: '',
   palletMeters: '',
   supplementaryOptions: [],
   weightKg: '',
@@ -24,6 +27,7 @@ const createEmptyFilters = () => ({
 });
 
 const POPULAR_DEPARTMENT_CODES = ['75', '77', '78', '91', '92', '93', '94', '95'];
+const PALLET_DIMENSION_ORDER = ['80x120', '100x100', '100x120', '120x120', '100x160', '60x80'];
 
 
 
@@ -381,40 +385,152 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
     [departmentOptionsAll]
   );
 
-  const palletMeterOptions = useMemo(() => {
-    const entries = meta?.availableFilters?.palletMeters || [];
-    return entries
-      .map((entry) => {
-        const meterValue =
-          typeof entry === 'number'
-            ? entry
-            : Number(entry?.meter ?? entry?.value ?? entry);
-        const palletCountValue =
-          typeof entry === 'object' && entry !== null
-            ? Number(entry.palletCount ?? entry.count ?? entry.nombre)
-            : Number.NaN;
+  const {
+    palletFormatGroups,
+    palletOptionMap,
+    palletBaseMeterMap,
+  } = useMemo(() => {
+    const rawEntries = Array.isArray(meta?.availableFilters?.palletMeters)
+      ? meta.availableFilters.palletMeters
+      : [];
 
-        if (!Number.isFinite(meterValue) || meterValue <= 0) {
-          return null;
-        }
+    const groupsMap = new Map();
+    const optionMap = new Map();
 
-        const normalizedMeter = Number(meterValue.toFixed(3));
-        return {
-          value: normalizedMeter.toFixed(3),
-          label: `${normalizedMeter.toLocaleString('fr-FR', {
-            minimumFractionDigits: normalizedMeter < 1 ? 3 : 2,
-            maximumFractionDigits: 3,
-          })} m`,
-          palletCount: Number.isFinite(palletCountValue) ? Math.round(palletCountValue) : null,
-        };
-      })
-      .filter(Boolean);
+    rawEntries.forEach((entry) => {
+      const rawDimension = entry?.dimension || entry?.format || 'Autre format';
+      const dimensionLabel = rawDimension?.toString().trim() || 'Autre format';
+      const normalizedKey = dimensionLabel.replace(/\s+/g, '').toLowerCase() || dimensionLabel;
+
+      const meterValue = Number(entry?.meter ?? entry?.value);
+      const tonnageValue = Number(entry?.tonnage ?? entry?.weight);
+      const countValue = Number(entry?.palletCount ?? entry?.count ?? entry?.nombre);
+
+      if (!Number.isFinite(meterValue) || meterValue <= 0 || !Number.isFinite(countValue) || countValue <= 0) {
+        return;
+      }
+
+      const optionId = `${normalizedKey}__${meterValue.toFixed(3)}__${countValue}`;
+      const option = {
+        id: optionId,
+        dimensionLabel,
+        meter: meterValue,
+        tonnage: Number.isFinite(tonnageValue) ? tonnageValue : null,
+        palletCount: countValue,
+      };
+
+      if (!groupsMap.has(normalizedKey)) {
+        groupsMap.set(normalizedKey, {
+          label: dimensionLabel,
+          options: [],
+        });
+      }
+      groupsMap.get(normalizedKey).options.push(option);
+      optionMap.set(optionId, option);
+    });
+
+    const getDimensionOrder = (label) => {
+      const normalized = label.replace(/\s+/g, '').toLowerCase();
+      const index = PALLET_DIMENSION_ORDER.indexOf(normalized);
+      return index === -1 ? PALLET_DIMENSION_ORDER.length : index;
+    };
+
+    const groups = Array.from(groupsMap.values()).map((group) => ({
+      ...group,
+      options: group.options.sort((a, b) => a.palletCount - b.palletCount || a.meter - b.meter),
+    }));
+    groups.sort((a, b) => {
+      const orderDiff = getDimensionOrder(a.label) - getDimensionOrder(b.label);
+      if (orderDiff !== 0) {
+        return orderDiff;
+      }
+      return a.label.localeCompare(b.label, 'fr-FR');
+    });
+
+    const baseMap = new Map();
+    groups.forEach((group) => {
+      const baseOption = group.options.find((option) => option.palletCount === 1) || group.options[0];
+      if (baseOption && baseOption.palletCount > 0) {
+        baseMap.set(group.label, baseOption.meter / baseOption.palletCount);
+      }
+    });
+
+    return {
+      palletFormatGroups: groups,
+      palletOptionMap: optionMap,
+      palletBaseMeterMap: baseMap,
+    };
   }, [meta]);
 
-  const selectedPalletMeterOption = useMemo(
-    () => palletMeterOptions.find((option) => option.value === formState.palletMeters) || null,
-    [palletMeterOptions, formState.palletMeters]
+  const computeMetersFromBase = useCallback((baseMeterValue, countValue) => {
+    const baseMeter = Number(baseMeterValue);
+    const count = Number(countValue);
+    if (!Number.isFinite(baseMeter) || !Number.isFinite(count) || count <= 0) {
+      return '';
+    }
+    return (baseMeter * count).toFixed(3);
+  }, []);
+
+  const handlePalletFormatSelection = useCallback(
+    (value) => {
+      if (!value) {
+        setFormState((prev) => ({
+          ...prev,
+          palletFormatOption: '',
+          palletFormat: '',
+          palletBaseMeter: '',
+          palletCount: '',
+          palletMeters: '',
+          weightKg: '',
+        }));
+        return;
+      }
+
+      const entry = palletOptionMap.get(value);
+      if (!entry) {
+        return;
+      }
+      const baseUnit = entry.palletCount > 0 ? entry.meter / entry.palletCount : null;
+      const weightKg = Number.isFinite(entry.tonnage) ? String(Math.round(entry.tonnage * 1000)) : '';
+      setFormState((prev) => ({
+        ...prev,
+        palletFormatOption: value,
+        palletFormat: entry.dimensionLabel,
+        palletBaseMeter: baseUnit ? baseUnit.toFixed(4) : '',
+        palletCount: String(entry.palletCount),
+        palletMeters: entry.meter.toFixed(3),
+        weightKg,
+      }));
+    },
+    [palletOptionMap]
   );
+
+  const handlePalletCountChange = useCallback(
+    (value) => {
+      setFormState((prev) => ({
+        ...prev,
+        palletCount: value,
+        palletFormatOption: '',
+        palletMeters: computeMetersFromBase(
+          prev.palletBaseMeter || palletBaseMeterMap.get(prev.palletFormat),
+          value
+        ),
+        weightKg: '',
+      }));
+    },
+    [computeMetersFromBase, palletBaseMeterMap]
+  );
+
+  const formattedPalletMetersLabel = useMemo(() => {
+    const meters = Number(formState.palletMeters);
+    if (!Number.isFinite(meters) || meters <= 0) {
+      return '';
+    }
+    return meters.toLocaleString('fr-FR', {
+      minimumFractionDigits: meters >= 1 ? 2 : 3,
+      maximumFractionDigits: 3,
+    });
+  }, [formState.palletMeters]);
 
   const appliedDistanceKm = useMemo(() => {
     const fromMeta = meta?.estimatedDistanceKm;
@@ -1050,6 +1166,31 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                 <div className="filters-grid">
                   <div className="filter-group">
                     <label>
+                      <span>Format / équivalences</span>
+                      <select
+                        value={formState.palletFormatOption}
+                        onChange={(e) => handlePalletFormatSelection(e.target.value)}
+                      >
+                        <option value="">Sélectionner</option>
+                        {palletFormatGroups.map((group) => (
+                          <optgroup key={group.label} label={group.label}>
+                            {group.options.map((option) => (
+                              <option key={option.id} value={option.id}>
+                                {option.meter.toFixed(3)} m •{' '}
+                                {Number.isFinite(option.tonnage) ? `${option.tonnage.toFixed(1)} t` : '-- t'} •{' '}
+                                {option.palletCount} palette{option.palletCount > 1 ? 's' : ''}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ))}
+                      </select>
+                    </label>
+                    {formState.palletFormat && (
+                      <small className="helper-text">Format sélectionné : {formState.palletFormat}</small>
+                    )}
+                  </div>
+                  <div className="filter-group">
+                    <label>
                       <span>Nombre de palettes</span>
                       <input
                         type="number"
@@ -1057,41 +1198,24 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                         max="33"
                         step="1"
                         value={formState.palletCount}
-                        onChange={(e) => updateFormState('palletCount', e.target.value)}
+                        onChange={(e) => handlePalletCountChange(e.target.value)}
+                        disabled={!formState.palletFormat}
                       />
                     </label>
                   </div>
                   <div className="filter-group">
                     <label>
-                      <span>Mètres de palette</span>
-                      <select
-                        value={formState.palletMeters}
-                        onChange={(e) => {
-                          updateFormState('palletMeters', e.target.value);
-                          if (e.target.value) {
-                            const matched = palletMeterOptions.find((option) => option.value === e.target.value);
-                            if (matched && Number.isFinite(matched.palletCount)) {
-                              updateFormState('palletCount', String(matched.palletCount));
-                            }
-                          }
-                        }}
-                      >
-                        <option value="">Sélectionner</option>
-                        {palletMeterOptions.map((option) => (
-                          <option key={'meter-' + option.value} value={option.value}>
-                            {option.label}
-                            {option.palletCount ? ' (approx. ' + option.palletCount + ' palettes)' : ''}
-                          </option>
-                        ))}
-                      </select>
+                      <span>Mètres calculés</span>
+                      <input
+                        type="text"
+                        value={formattedPalletMetersLabel ? `${formattedPalletMetersLabel} m` : ''}
+                        readOnly
+                        placeholder="--"
+                      />
                     </label>
-                    {selectedPalletMeterOption?.palletCount && (
-                      <small className="helper-text">
-                        approx.{' '}
-                        {selectedPalletMeterOption.palletCount.toLocaleString('fr-FR')}{' '}
-                        palette{selectedPalletMeterOption.palletCount > 1 ? 's' : ''}
-                      </small>
-                    )}
+                    <small className="helper-text">
+                      Calcul automatique (format × nombre)
+                    </small>
                   </div>
                   <div className="filter-group">
                     <label>
