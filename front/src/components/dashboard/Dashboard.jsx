@@ -664,7 +664,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
 
       const departureDepartment = gridData.meta?.departureDepartment;
       const title = `Grille tarifaire ${provider.name || ''}`.trim() || 'Grille tarifaire';
-      const subtitle = departureDepartment ? `Dpart : ${departureDepartment}` : '';
+      const subtitle = departureDepartment ? `Départ : ${departureDepartment}` : '';
       const gridHtml = `
         <div class="tariff-grid printable">
           <div class="tariff-grid__meta">
@@ -949,7 +949,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                 <div className="filters-grid">
                   <div className="filter-group">
                     <label>
-                      <span>Dpart (estimation)</span>
+                      <span>Départ (estimation)</span>
                       <select
                         value={estimationDeparture}
                         onChange={(e) => {
@@ -957,9 +957,9 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                           setPage(1);
                         }}
                       >
-                        <option value="">Slectionner</option>
+                        <option value="">Sélectionner</option>
                         {popularDepartmentOptions.length > 0 && (
-                          <optgroup key="popular-departments" label="Dpartements les plus utiliss">
+                          <optgroup key="popular-departments" label="Départements les plus utilisés">
                             {popularDepartmentOptions.map((option) => (
                               <option key={'depart-' + option.value} value={option.value}>
                                 {option.label}
@@ -968,7 +968,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                           </optgroup>
                         )}
                         {otherDepartmentOptions.length > 0 && (
-                          <optgroup key="other-departments" label="Tous les dpartements">
+                          <optgroup key="other-departments" label="Tous les départements">
                             {otherDepartmentOptions.map((option) => (
                               <option key={'depart-' + option.value} value={option.value}>
                                 {option.label}
@@ -981,7 +981,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                   </div>
                   <div className="filter-group">
                     <label>
-                      <span>Arrive (estimation)</span>
+                      <span>Arrivée (estimation)</span>
                       <select
                         value={estimationArrival}
                         onChange={(e) => {
@@ -989,9 +989,9 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                           setPage(1);
                         }}
                       >
-                        <option value="">Slectionner</option>
+                        <option value="">Sélectionner</option>
                         {popularDepartmentOptions.length > 0 && (
-                          <optgroup key="popular-arrival-departments" label="Dpartements les plus utiliss">
+                          <optgroup key="popular-arrival-departments" label="Départements les plus utilisés">
                             {popularDepartmentOptions.map((option) => (
                               <option key={'arrivee-' + option.value} value={option.value}>
                                 {option.label}
@@ -1000,7 +1000,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                           </optgroup>
                         )}
                         {otherDepartmentOptions.length > 0 && (
-                          <optgroup key="other-arrival-departments" label="Tous les dpartements">
+                          <optgroup key="other-arrival-departments" label="Tous les départements">
                             {otherDepartmentOptions.map((option) => (
                               <option key={'arrivee-' + option.value} value={option.value}>
                                 {option.label}
@@ -1021,7 +1021,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                   </div>
                   <div className="filter-group filter-group--full">
                     <SearchableMultiSelect
-                      label="Services & quipements"
+                      label="Services & équipements"
                       options={FEATURE_GROUP_DEFINITIONS.flatMap((group) =>
                         group.keys.map((key) => ({
                           value: key,
@@ -1036,12 +1036,12 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                 <div className="estimation-info">
                   {appliedDistanceKm ? (
                     <span>
-                      Distance estime : <strong>{appliedDistanceKm.toFixed(1)} km</strong>
+                      Distance estimée : <strong>{appliedDistanceKm.toFixed(1)} km</strong>
                       {meta?.estimatedDistanceSource === 'departments' && ' (calcul automatique)'}
                       {meta?.estimatedDistanceSource === 'manual' && ' (distance saisie)'}
                     </span>
                   ) : (
-                    <span>Saisissez une distance ou slectionnez dpart/arrive</span>
+                    <span>Saisissez une distance ou sélectionnez départ/arrivée</span>
                   )}
                 </div>
               </div>
@@ -1063,7 +1063,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                   </div>
                   <div className="filter-group">
                     <label>
-                      <span>Mtres de palette</span>
+                      <span>Mètres de palette</span>
                       <select
                         value={formState.palletMeters}
                         onChange={(e) => {
@@ -1076,7 +1076,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                           }
                         }}
                       >
-                        <option value="">Slectionner</option>
+                        <option value="">Sélectionner</option>
                         {palletMeterOptions.map((option) => (
                           <option key={'meter-' + option.value} value={option.value}>
                             {option.label}
@@ -1172,10 +1172,10 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                   <thead>
                     <tr>
                       <th>Transporteur</th>
-                      <th>Dpartement</th>
+                      <th>Département</th>
                       <th>Contact</th>
-                      <th>Tlphone</th>
-                      <th>Distance estime</th>
+                      <th>Téléphone</th>
+                      <th>Distance estimée</th>
                       <th>Grille tarif transporteur</th>
                     </tr>
                   </thead>

@@ -684,7 +684,7 @@ const getProvidersByIds = async (req, res, next) => {
   try {
     const ids = parseCsv(req.query.ids);
     if (ids.length === 0) {
-      return res.status(400).json({ error: 'ParamÃƒÂ¨tre ids requis.' });
+      return res.status(400).json({ error: 'Paramètre ids requis.' });
     }
 
     const providers = await Promise.all(ids.map((id) => findProviderById(id)));
@@ -693,7 +693,7 @@ const getProvidersByIds = async (req, res, next) => {
       .map((provider) => enrichProvider(provider, req.query));
 
     if (results.length === 0) {
-      return res.status(404).json({ error: 'Aucun transporteur trouvÃƒÂ© pour les identifiants demandÃƒÂ©s.' });
+      return res.status(404).json({ error: 'Aucun transporteur trouvé pour les identifiants demandés.' });
     }
 
     return res.json({ data: results });
@@ -802,7 +802,7 @@ const normalizeProviderPayload = (input, { partial = false } = {}) => {
 
     const numeric = getNumber(data[field]);
     if (numeric === undefined) {
-      errors.push(`Le champ ${field} doit ÃƒÂªtre un nombre.`);
+      errors.push(`Le champ ${field} doit être un nombre.`);
       return;
     }
 
@@ -813,7 +813,7 @@ const normalizeProviderPayload = (input, { partial = false } = {}) => {
     }
 
     if (resolved < min || resolved > max) {
-      errors.push(`Le champ ${field} doit ÃƒÂªtre compris entre ${min} et ${max}.`);
+      errors.push(`Le champ ${field} doit être compris entre ${min} et ${max}.`);
       return;
     }
 
@@ -893,7 +893,7 @@ const normalizeProviderPayload = (input, { partial = false } = {}) => {
   }
 
   if (partial && Object.keys(normalized).length === 0) {
-    errors.push('Aucun champ valide ÃƒÂ  mettre ÃƒÂ  jour.');
+    errors.push('Aucun champ valide à mettre à jour.');
   }
 
   return { errors, value: normalized };
@@ -1008,7 +1008,7 @@ const getProviderBaseTariffGrid = async (req, res, next) => {
     const departureDepartment = resolveDepartureDepartment(provider);
     if (!departureDepartment) {
       return res.status(400).json({
-        error: 'Impossible de dÃ©terminer le dÃ©partement de dÃ©part du transporteur.',
+        error: 'Impossible de déterminer le département de départ du transporteur.',
       });
     }
 
