@@ -230,6 +230,11 @@ body {
   color: var(--color-muted);
 }
 
+.autocomplete-input {
+  width: 100%;
+  margin-bottom: 8px;
+}
+
 .filters-extra {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));

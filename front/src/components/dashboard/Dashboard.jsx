@@ -26,7 +26,6 @@ const createEmptyFilters = () => ({
   pickupDepartments: [],
 });
 
-const POPULAR_DEPARTMENT_CODES = ['75', '77', '78', '91', '92', '93', '94', '95'];
 const PALLET_DIMENSION_ORDER = ['80x120', '100x100', '100x120', '120x120', '100x160', '60x80'];
 
 
@@ -306,6 +305,9 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
   const [error, setError] = useState(null);
   const [estimationDeparture, setEstimationDeparture] = useState('');
   const [estimationArrival, setEstimationArrival] = useState('');
+  const [departureInput, setDepartureInput] = useState('');
+  const [arrivalInput, setArrivalInput] = useState('');
+  const [palletFormatInput, setPalletFormatInput] = useState('');
   const [tariffModal, setTariffModal] = useState({
     open: false,
     provider: null,
@@ -370,19 +372,57 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
     return Array.from(map.values()).sort((a, b) => a.value.localeCompare(b.value));
   }, [deliveryDepartmentOptions, pickupDepartmentOptions]);
 
-  const popularDepartmentOptions = useMemo(() => {
-    if (!departmentOptionsAll.length) {
-      return [];
+  useEffect(() => {
+    if (!estimationDeparture) {
+      setDepartureInput('');
+      return;
     }
+    const matched = departmentOptionsAll.find((option) => option.value === estimationDeparture);
+    setDepartureInput(matched ? matched.label : estimationDeparture);
+  }, [estimationDeparture, departmentOptionsAll]);
 
-    return POPULAR_DEPARTMENT_CODES.map((code) =>
-      departmentOptionsAll.find((option) => option.value === code)
-    ).filter(Boolean);
-  }, [departmentOptionsAll]);
+  useEffect(() => {
+    if (!estimationArrival) {
+      setArrivalInput('');
+      return;
+    }
+    const matched = departmentOptionsAll.find((option) => option.value === estimationArrival);
+    setArrivalInput(matched ? matched.label : estimationArrival);
+  }, [estimationArrival, departmentOptionsAll]);
 
-  const otherDepartmentOptions = useMemo(
-    () => departmentOptionsAll.filter((option) => !POPULAR_DEPARTMENT_CODES.includes(option.value)),
-    [departmentOptionsAll]
+  const handleDepartmentInputChange = useCallback(
+    (value, applyValue) => {
+      const normalized = value.trim().toLowerCase();
+      if (!normalized) {
+        applyValue('');
+        setPage(1);
+        return;
+      }
+      const matched =
+        departmentOptionsAll.find((option) => option.value.toLowerCase() === normalized) ||
+        departmentOptionsAll.find((option) => option.label.toLowerCase() === normalized);
+      if (matched) {
+        applyValue(matched.value);
+        setPage(1);
+      }
+    },
+    [departmentOptionsAll, setPage]
+  );
+
+  const onDepartureInputChange = useCallback(
+    (value) => {
+      setDepartureInput(value);
+      handleDepartmentInputChange(value, setEstimationDeparture);
+    },
+    [handleDepartmentInputChange]
+  );
+
+  const onArrivalInputChange = useCallback(
+    (value) => {
+      setArrivalInput(value);
+      handleDepartmentInputChange(value, setEstimationArrival);
+    },
+    [handleDepartmentInputChange]
   );
 
   const {
@@ -462,6 +502,27 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
     };
   }, [meta]);
 
+  const flattenedPalletOptions = useMemo(
+    () => palletFormatGroups.flatMap((group) => group.options),
+    [palletFormatGroups]
+  );
+
+  const getPalletOptionDisplay = useCallback((option) => {
+    const tonnageLabel = Number.isFinite(option.tonnage) ? `${option.tonnage.toFixed(1)} t` : '-- t';
+    return `${option.dimensionLabel} • ${option.meter.toFixed(3)} m • ${tonnageLabel} • ${
+      option.palletCount
+    } palette${option.palletCount > 1 ? 's' : ''}`;
+  }, []);
+
+  useEffect(() => {
+    if (!formState.palletFormatOption) {
+      setPalletFormatInput('');
+      return;
+    }
+    const entry = palletOptionMap.get(formState.palletFormatOption);
+    setPalletFormatInput(entry ? getPalletOptionDisplay(entry) : '');
+  }, [formState.palletFormatOption, palletOptionMap, getPalletOptionDisplay]);
+
   const computeMetersFromBase = useCallback((baseMeterValue, countValue) => {
     const baseMeter = Number(baseMeterValue);
     const count = Number(countValue);
@@ -483,6 +544,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
           palletMeters: '',
           weightKg: '',
         }));
+        setPalletFormatInput('');
         return;
       }
 
@@ -501,8 +563,9 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
         palletMeters: entry.meter.toFixed(3),
         weightKg,
       }));
+      setPalletFormatInput(getPalletOptionDisplay(entry));
     },
-    [palletOptionMap]
+    [palletOptionMap, getPalletOptionDisplay]
   );
 
   const handlePalletCountChange = useCallback(
@@ -517,8 +580,27 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
         ),
         weightKg: '',
       }));
+      setPalletFormatInput('');
     },
     [computeMetersFromBase, palletBaseMeterMap]
+  );
+
+  const handlePalletFormatInputChange = useCallback(
+    (value) => {
+      setPalletFormatInput(value);
+      if (!value.trim()) {
+        handlePalletFormatSelection('');
+        return;
+      }
+      const normalized = value.trim().toLowerCase();
+      const matched = flattenedPalletOptions.find(
+        (option) => getPalletOptionDisplay(option).toLowerCase() === normalized
+      );
+      if (matched) {
+        handlePalletFormatSelection(matched.id);
+      }
+    },
+    [flattenedPalletOptions, getPalletOptionDisplay, handlePalletFormatSelection]
   );
 
   const formattedPalletMetersLabel = useMemo(() => {
@@ -1066,65 +1148,41 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                   <div className="filter-group">
                     <label>
                       <span>Départ (estimation)</span>
-                      <select
-                        value={estimationDeparture}
-                        onChange={(e) => {
-                          setEstimationDeparture(e.target.value);
-                          setPage(1);
-                        }}
-                      >
-                        <option value="">Sélectionner</option>
-                        {popularDepartmentOptions.length > 0 && (
-                          <optgroup key="popular-departments" label="Départements les plus utilisés">
-                            {popularDepartmentOptions.map((option) => (
-                              <option key={'depart-' + option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </optgroup>
-                        )}
-                        {otherDepartmentOptions.length > 0 && (
-                          <optgroup key="other-departments" label="Tous les départements">
-                            {otherDepartmentOptions.map((option) => (
-                              <option key={'depart-' + option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </optgroup>
-                        )}
-                      </select>
+                      <input
+                        className="autocomplete-input"
+                        type="text"
+                        list="departures-datalist"
+                        placeholder="Code ou nom de département"
+                        value={departureInput}
+                        onChange={(e) => onDepartureInputChange(e.target.value)}
+                      />
+                      <datalist id="departures-datalist">
+                        {departmentOptionsAll.map((option) => (
+                          <option key={'depart-option-' + option.value} value={option.label}>
+                            {option.value}
+                          </option>
+                        ))}
+                      </datalist>
                     </label>
                   </div>
                   <div className="filter-group">
                     <label>
                       <span>Arrivée (estimation)</span>
-                      <select
-                        value={estimationArrival}
-                        onChange={(e) => {
-                          setEstimationArrival(e.target.value);
-                          setPage(1);
-                        }}
-                      >
-                        <option value="">Sélectionner</option>
-                        {popularDepartmentOptions.length > 0 && (
-                          <optgroup key="popular-arrival-departments" label="Départements les plus utilisés">
-                            {popularDepartmentOptions.map((option) => (
-                              <option key={'arrivee-' + option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </optgroup>
-                        )}
-                        {otherDepartmentOptions.length > 0 && (
-                          <optgroup key="other-arrival-departments" label="Tous les départements">
-                            {otherDepartmentOptions.map((option) => (
-                              <option key={'arrivee-' + option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </optgroup>
-                        )}
-                      </select>
+                      <input
+                        className="autocomplete-input"
+                        type="text"
+                        list="arrivals-datalist"
+                        placeholder="Code ou nom de département"
+                        value={arrivalInput}
+                        onChange={(e) => onArrivalInputChange(e.target.value)}
+                      />
+                      <datalist id="arrivals-datalist">
+                        {departmentOptionsAll.map((option) => (
+                          <option key={'arrivee-option-' + option.value} value={option.label}>
+                            {option.value}
+                          </option>
+                        ))}
+                      </datalist>
                     </label>
                   </div>
                   <div className="filter-group filter-group--full">
@@ -1167,23 +1225,19 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                   <div className="filter-group">
                     <label>
                       <span>Format / équivalences</span>
-                      <select
-                        value={formState.palletFormatOption}
-                        onChange={(e) => handlePalletFormatSelection(e.target.value)}
-                      >
-                        <option value="">Sélectionner</option>
-                        {palletFormatGroups.map((group) => (
-                          <optgroup key={group.label} label={group.label}>
-                            {group.options.map((option) => (
-                              <option key={option.id} value={option.id}>
-                                {option.meter.toFixed(3)} m •{' '}
-                                {Number.isFinite(option.tonnage) ? `${option.tonnage.toFixed(1)} t` : '-- t'} •{' '}
-                                {option.palletCount} palette{option.palletCount > 1 ? 's' : ''}
-                              </option>
-                            ))}
-                          </optgroup>
+                      <input
+                        className="autocomplete-input"
+                        type="text"
+                        list="pallet-format-datalist"
+                        placeholder="80x120 • 0.8 m • 0.9 t • 1 palette"
+                        value={palletFormatInput}
+                        onChange={(e) => handlePalletFormatInputChange(e.target.value)}
+                      />
+                      <datalist id="pallet-format-datalist">
+                        {flattenedPalletOptions.map((option) => (
+                          <option key={option.id} value={getPalletOptionDisplay(option)} />
                         ))}
-                      </select>
+                      </datalist>
                     </label>
                     {formState.palletFormat && (
                       <small className="helper-text">Format sélectionné : {formState.palletFormat}</small>
