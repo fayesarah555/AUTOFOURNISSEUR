@@ -85,6 +85,9 @@ const SUPPLEMENTARY_OPTIONS = [
   { value: 'chgt-au-pont', label: 'Chgt au Pont' },
 ];
 
+// Départements Ile-de-France pour mise en avant dans les listes
+const IDF_DEPARTMENTS = new Set(['75', '77', '78', '91', '92', '93', '94', '95']);
+
 
 
 const FRENCH_DEPARTMENT_NAMES = {
@@ -313,10 +316,11 @@ const SearchableSingleSelect = ({
       return options;
     }
     const lower = searchTerm.toLowerCase();
+    // En mode recherche, on masque les en-têtes de section
     return options.filter(
       (option) =>
-        option.label.toLowerCase().includes(lower) ||
-        option.value.toLowerCase().includes(lower)
+        option.__type !== 'header' &&
+        (option.label.toLowerCase().includes(lower) || option.value.toLowerCase().includes(lower))
     );
   }, [options, searchTerm]);
 
@@ -364,18 +368,24 @@ const SearchableSingleSelect = ({
             {filteredOptions.length === 0 ? (
               <div className="select-no-results">Aucun résultat</div>
             ) : (
-              filteredOptions.map((option) => (
-                <button
-                  type="button"
-                  key={`${label}-${option.value}`}
-                  className={`select-option-btn${
-                    option.value === selectedValue ? ' select-option-btn--active' : ''
-                  }`}
-                  onClick={() => handleSelect(option.value)}
-                >
-                  {option.label}
-                </button>
-              ))
+              filteredOptions.map((option) =>
+                option.__type === 'header' ? (
+                  <div key={`${label}-${option.value}`} className="select-section">
+                    {option.label}
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    key={`${label}-${option.value}`}
+                    className={`select-option-btn${
+                      option.value === selectedValue ? ' select-option-btn--active' : ''
+                    }`}
+                    onClick={() => handleSelect(option.value)}
+                  >
+                    {option.label}
+                  </button>
+                )
+              )
             )}
           </div>
         </div>
@@ -465,7 +475,21 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
         map.set(option.value, option);
       }
     });
-    return Array.from(map.values()).sort((a, b) => a.value.localeCompare(b.value));
+    const all = Array.from(map.values()).sort((a, b) => a.value.localeCompare(b.value));
+
+    const idf = all.filter((opt) => IDF_DEPARTMENTS.has(opt.value));
+    const others = all.filter((opt) => !IDF_DEPARTMENTS.has(opt.value));
+
+    const grouped = [];
+    if (idf.length) {
+      grouped.push({ value: '__hdr_idf', label: 'Départements IDF', __type: 'header' });
+      grouped.push(...idf);
+    }
+    if (others.length) {
+      grouped.push({ value: '__hdr_other', label: 'Autres départements', __type: 'header' });
+      grouped.push(...others);
+    }
+    return grouped;
   }, [deliveryDepartmentOptions, pickupDepartmentOptions]);
 
   const {
@@ -761,7 +785,11 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
     const baseUrl =
       provider.tariffDocumentUrl && provider.tariffDocumentUrl.trim().length > 0
         ? provider.tariffDocumentUrl
-        : `/api/providers/${provider.id}/tariff-document`;
+        : (() => {
+            const apiBase = (apiClient.defaults?.baseURL || '').replace(/\/$/, '');
+            const id = encodeURIComponent(provider.id);
+            return apiBase ? `${apiBase}/api/providers/${id}/tariff-document` : `/api/providers/${id}/tariff-document`;
+          })();
 
     setTariffModal({
       open: true,
@@ -1407,7 +1435,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                                 <strong>{provider.name}</strong>
                                 {provider.hasTariffDocument && (
                                   <span className="provider-name-badge" aria-hidden="true">
-                                PDF
+                                    PDF
                                   </span>
                                 )}
                               </div>
@@ -1423,8 +1451,9 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                               <button
                                 type="button"
                                 className="btn-tariff btn-tariff--pdf"
-                                onClick={() => handleExportTariffGridPdf(provider)}
-                                title="Tlcharger la grille en PDF"
+                                onClick={() => handleOpenTariff(provider)}
+                                title="Afficher la grille PDF du transporteur"
+                                disabled={!provider.hasTariffDocument}
                               >
                                 PDF
                               </button>
@@ -1589,7 +1618,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                   ) : (
                     <p className="tariff-modal__message">Chargement du document...</p>
                   )}
-                  {tariffModal.type === 'remote' && !tariffModal.error && (
+                  {tariffModal.type === 'remote' && (
                     <p className="tariff-modal__hint">
                       Le document est hébergé sur un site externe. Utilisez le bouton d&apos;ouverture si l&apos;aperçu ne s&apos;affiche pas.
                     </p>
@@ -1608,7 +1637,9 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                   rel="noopener noreferrer"
                   className="tariff-modal__btn tariff-modal__btn--primary"
                 >
-                  {tariffModal.type === 'remote' ? 'Ouvrir dans un nouvel onglet' : 'Télécharger le PDF'}
+                  {tariffModal.type === 'remote'
+                    ? 'Ouvrir dans un nouvel onglet'
+                    : 'Télécharger le PDF'}
                 </a>
               )}
             </footer>

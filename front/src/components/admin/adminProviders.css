@@ -65,6 +65,87 @@
   color: var(--color-positive, #16a34a);
 }
 
+.import-status.error {
+  background: rgba(220, 38, 38, 0.08);
+  border-color: rgba(220, 38, 38, 0.3);
+  color: #b91c1c;
+}
+
+.creation-modes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.creation-card {
+  background: var(--color-card, #fff);
+  border-radius: 16px;
+  padding: 20px;
+  border: 1px solid var(--color-border, #e3e7f0);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.creation-card h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--color-text, #0f172a);
+}
+
+.creation-card p {
+  margin: 0;
+  color: var(--color-muted, #70819a);
+  font-size: 0.9rem;
+}
+
+.creation-card-actions {
+  margin-top: auto;
+}
+
+.template-link {
+  color: var(--color-accent, #ef4c54);
+  font-weight: 600;
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+
+.template-link:hover {
+  text-decoration: underline;
+}
+
+.excel-import-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.excel-import-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.85rem;
+}
+
+.excel-import-form input[type='file'] {
+  padding: 6px;
+  border: 1px dashed var(--color-border, #e3e7f0);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.file-name {
+  font-size: 0.8rem;
+  color: var(--color-muted, #70819a);
+  word-break: break-all;
+}
+
+.creation-card .import-status {
+  margin-bottom: 0;
+}
+
 .admin-list-section {
   background: var(--color-card, #fff);
   border-radius: 16px;
@@ -137,7 +218,56 @@
 
 .table-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
+  align-items: center;
+}
+
+.table-actions button {
+  border: 1px solid var(--color-border, #e3e7f0);
+  background: var(--color-card, #fff);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.table-actions button:hover:not(:disabled) {
+  background: #eef2ff;
+  border-color: #cbd5f5;
+}
+
+.table-actions button.danger {
+  background: #fee2e2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+.table-actions button.danger:hover:not(:disabled) {
+  background: #fecaca;
+}
+
+.table-actions button:disabled,
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.tariff-upload-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 140px;
+}
+
+.tariff-upload-hint {
+  font-size: 0.75rem;
+  color: var(--color-muted, #70819a);
+  max-width: 160px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .admin-error {

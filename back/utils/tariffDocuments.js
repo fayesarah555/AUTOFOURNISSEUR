@@ -4,6 +4,11 @@ const path = require('path');
 const PUBLIC_ROOT = path.join(__dirname, '..', 'public');
 const TARIFF_DIR = path.join(PUBLIC_ROOT, 'tariffs');
 
+const FILE_FORMATS = {
+  pdf: new Set(['.pdf']),
+  excel: new Set(['.xls', '.xlsx']),
+};
+
 const ensureTariffDirectory = () => {
   try {
     fs.mkdirSync(TARIFF_DIR, { recursive: true });
@@ -19,6 +24,21 @@ const sanitizeFilename = (value) => {
     return '';
   }
   return path.basename(value);
+};
+
+const detectTariffFormat = (filename) => {
+  if (!filename) {
+    return null;
+  }
+  const extension = path.extname(filename).toLowerCase();
+
+  for (const [format, extensions] of Object.entries(FILE_FORMATS)) {
+    if (extensions.has(extension)) {
+      return format;
+    }
+  }
+
+  return null;
 };
 
 const findTariffDocument = (providerId, explicitPath) => {
@@ -59,9 +79,11 @@ const findTariffDocument = (providerId, explicitPath) => {
     try {
       const stat = fs.statSync(candidate);
       if (stat.isFile()) {
+        const format = detectTariffFormat(candidate);
         return {
           hasDocument: true,
           type: 'local',
+          format,
           publicUrl: `/api/providers/${providerId}/tariff-document`,
           localPath: candidate,
           filename: path.basename(candidate),
@@ -84,5 +106,7 @@ const findTariffDocument = (providerId, explicitPath) => {
 module.exports = {
   PUBLIC_ROOT,
   TARIFF_DIR,
+  detectTariffFormat,
+  ensureTariffDirectory,
   findTariffDocument,
 };

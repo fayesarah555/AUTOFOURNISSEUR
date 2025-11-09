@@ -259,6 +259,7 @@ const hydrateProviders = async (supplierRows) => {
     provider.hasTariffDocument = documentInfo.hasDocument;
     provider.tariffDocumentUrl = documentInfo.hasDocument ? documentInfo.publicUrl : null;
     provider.tariffDocumentType = documentInfo.type || null;
+    provider.tariffDocumentFormat = documentInfo.format || null;
     if (documentInfo.hasDocument && documentInfo.filename) {
       provider.tariffDocumentFilename = documentInfo.filename;
     }
@@ -426,6 +427,24 @@ const deleteProvider = async (externalRef) => {
   return result.affectedRows > 0;
 };
 
+const updateProviderTariffDocumentPath = async (externalRef, filename) => {
+  if (!externalRef) {
+    return null;
+  }
+
+  const rows = await fetchSuppliers(externalRef);
+  if (!rows.length) {
+    return null;
+  }
+
+  // await pool.query(
+  //   'UPDATE suppliers SET tariff_document_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+  //   [filename || null, rows[0].id]
+  // );
+
+  return findProviderById(externalRef);
+};
+
 const resetProviders = async () => {
   // No-op for database-backed repository.
   return false;
@@ -438,5 +457,6 @@ module.exports = {
   addProvider,
   updateProvider,
   deleteProvider,
+  updateProviderTariffDocumentPath,
   resetProviders,
 };

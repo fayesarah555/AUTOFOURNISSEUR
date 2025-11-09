@@ -1,3 +1,7 @@
+const fs = require('fs');
+const path = require('path');
+const PDFDocument = require('pdfkit');
+const xlsx = require('xlsx');
 const {
   listProviders: repositoryListProviders,
   findProviderById,
@@ -5,6 +9,7 @@ const {
   updateProvider,
   deleteProvider,
   getTariffDocumentDefinition,
+  updateProviderTariffDocumentPath,
 } = require('../repositories/providerRepository');
 const {
   computeDepartmentDistanceKm,
@@ -17,7 +22,12 @@ const {
   getAvailablePaletteMeters,
   getPalletCountForMeters,
 } = require('../services/tariffMatrixService');
-const { findTariffDocument } = require('../utils/tariffDocuments');
+const {
+  findTariffDocument,
+  ensureTariffDirectory,
+  TARIFF_DIR,
+} = require('../utils/tariffDocuments');
+const fsPromises = fs.promises;
 
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 50;
@@ -31,6 +41,72 @@ const SUPPLEMENTARY_OPTIONS = [
   { value: 'matiere-adr', label: 'Matiere ADR' },
   { value: 'chgt-au-pont', label: 'Chgt au Pont' },
 ];
+
+const EXCEL_TEMPLATE_COLUMNS = {
+  name: 'Nom du transporteur',
+  description: 'Description',
+  address: 'Adresse',
+  postalCode: 'Code postal',
+  city: 'Ville',
+  department: 'Département',
+  contact: 'Contact',
+  phone: 'Téléphone',
+  email: 'Email',
+  unreachable: 'Ne répond pas (oui/non)',
+  deliveryDepartments: 'Départements livraison (codes séparés par des virgules)',
+  pickupDepartments: 'Départements chargement (codes séparés par des virgules)',
+  profileNotes: 'Notes internes',
+  profileFeatures: 'Équipements (séparés par des virgules)',
+  serviceCapabilities: 'Services (séparés par des virgules)',
+  modes: 'Modes (séparés par des virgules)',
+  coverage: 'Couverture (domestic/global)',
+  contractFlexibility: 'Contrat (spot/monthly/quarterly)',
+};
+
+const EXCEL_TEMPLATE_HEADER_ORDER = [
+  EXCEL_TEMPLATE_COLUMNS.name,
+  EXCEL_TEMPLATE_COLUMNS.description,
+  EXCEL_TEMPLATE_COLUMNS.address,
+  EXCEL_TEMPLATE_COLUMNS.postalCode,
+  EXCEL_TEMPLATE_COLUMNS.city,
+  EXCEL_TEMPLATE_COLUMNS.department,
+  EXCEL_TEMPLATE_COLUMNS.contact,
+  EXCEL_TEMPLATE_COLUMNS.phone,
+  EXCEL_TEMPLATE_COLUMNS.email,
+  EXCEL_TEMPLATE_COLUMNS.unreachable,
+  EXCEL_TEMPLATE_COLUMNS.deliveryDepartments,
+  EXCEL_TEMPLATE_COLUMNS.pickupDepartments,
+  EXCEL_TEMPLATE_COLUMNS.profileNotes,
+  EXCEL_TEMPLATE_COLUMNS.profileFeatures,
+  EXCEL_TEMPLATE_COLUMNS.serviceCapabilities,
+  EXCEL_TEMPLATE_COLUMNS.modes,
+  EXCEL_TEMPLATE_COLUMNS.coverage,
+  EXCEL_TEMPLATE_COLUMNS.contractFlexibility,
+];
+
+const EXCEL_TEMPLATE_SAMPLE_ROW = {
+  [EXCEL_TEMPLATE_COLUMNS.name]: '#EXEMPLE - À REMPLACER',
+  [EXCEL_TEMPLATE_COLUMNS.description]:
+    'Transporteur régional spécialisé messagerie palette.',
+  [EXCEL_TEMPLATE_COLUMNS.address]: '12 rue des Forges',
+  [EXCEL_TEMPLATE_COLUMNS.postalCode]: '42000',
+  [EXCEL_TEMPLATE_COLUMNS.city]: 'Saint-Étienne',
+  [EXCEL_TEMPLATE_COLUMNS.department]: '42',
+  [EXCEL_TEMPLATE_COLUMNS.contact]: 'Jean Dupont',
+  [EXCEL_TEMPLATE_COLUMNS.phone]: '0601020304',
+  [EXCEL_TEMPLATE_COLUMNS.email]: 'contact@example.com',
+  [EXCEL_TEMPLATE_COLUMNS.unreachable]: 'non',
+  [EXCEL_TEMPLATE_COLUMNS.deliveryDepartments]: '01, 03, 38, 69',
+  [EXCEL_TEMPLATE_COLUMNS.pickupDepartments]: '42, 43, 63',
+  [EXCEL_TEMPLATE_COLUMNS.profileNotes]: 'Disponible 6j/7 - horaires étendus',
+  [EXCEL_TEMPLATE_COLUMNS.profileFeatures]: 'semi-tautliner, porteur-hayon',
+  [EXCEL_TEMPLATE_COLUMNS.serviceCapabilities]: 'express, adr',
+  [EXCEL_TEMPLATE_COLUMNS.modes]: 'road',
+  [EXCEL_TEMPLATE_COLUMNS.coverage]: 'domestic',
+  [EXCEL_TEMPLATE_COLUMNS.contractFlexibility]: 'spot',
+};
+
+const EXCEL_BOOLEAN_TRUE = new Set(['oui', 'yes', 'true', '1', 'x']);
 
 const matchesSupplementaryOption = (option, provider, featureSet) => {
   const features =
@@ -115,6 +191,244 @@ const parseCsv = (value) => {
 };
 
 const parseListInput = (value) => parseCsv(value);
+
+const splitMultiValueInput = (value) => {
+  if (value === undefined || value === null) {
+    return [];
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => String(item ?? '').trim())
+      .filter(Boolean);
+  }
+
+  return value
+    .toString()
+    .split(/[,;]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+};
+
+const parseExcelBoolean = (value) => {
+  if (value === undefined || value === null) {
+    return false;
+  }
+  const normalized = value.toString().trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+  return EXCEL_BOOLEAN_TRUE.has(normalized);
+};
+
+const parseDepartmentList = (value) =>
+  splitMultiValueInput(value).map((item) => normalizeDepartmentFilter(item)).filter(Boolean);
+
+const cleanupUploadedFile = async (file) => {
+  if (!file?.path) {
+    return;
+  }
+
+  try {
+    await fsPromises.unlink(file.path);
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      console.warn('Failed to cleanup uploaded file', error);
+    }
+  }
+};
+
+const ALLOWED_TARIFF_FILE_TYPES = {
+  pdf: {
+    extensions: new Set(['.pdf']),
+    mimes: new Set(['application/pdf']),
+    defaultExtension: '.pdf',
+  },
+  excel: {
+    extensions: new Set(['.xls', '.xlsx']),
+    mimes: new Set([
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ]),
+    defaultExtension: '.xlsx',
+  },
+};
+
+const resolveTariffFileInfo = (file) => {
+  if (!file) {
+    throw new Error('Aucun fichier reçu.');
+  }
+
+  const originalName = (file.originalname || '').toLowerCase();
+  const extension = (path.extname(originalName) || '').toLowerCase();
+  const mime = (file.mimetype || '').toLowerCase();
+
+  for (const [format, spec] of Object.entries(ALLOWED_TARIFF_FILE_TYPES)) {
+    if (spec.extensions.has(extension) || spec.mimes.has(mime)) {
+      const resolvedExtension = extension || spec.defaultExtension;
+      return { format, extension: resolvedExtension };
+    }
+  }
+
+  throw new Error('Le fichier doit être un PDF ou un Excel (.xls / .xlsx).');
+};
+
+const persistTariffDocumentForProvider = async (
+  externalRef,
+  tempFile,
+  { extension, explicitPath = '', buffer = null } = {}
+) => {
+  if (!externalRef) {
+    return null;
+  }
+
+  ensureTariffDirectory();
+
+  const sanitizedExtension = extension && extension.startsWith('.') ? extension : '.pdf';
+  const targetFilename = path.basename(`${externalRef}${sanitizedExtension}`);
+  const targetPath = path.join(TARIFF_DIR, targetFilename);
+
+  await fsPromises.unlink(targetPath).catch((error) => {
+    if (error.code !== 'ENOENT') {
+      throw error;
+    }
+  });
+
+  const previousDocument = findTariffDocument(externalRef, explicitPath);
+  if (previousDocument.localPath && previousDocument.localPath !== targetPath) {
+    await fsPromises.unlink(previousDocument.localPath).catch((error) => {
+      if (error.code !== 'ENOENT') {
+        console.warn('Failed to remove previous tariff document', error);
+      }
+    });
+  }
+
+  if (buffer) {
+    await fsPromises.writeFile(targetPath, buffer);
+  } else if (tempFile?.path) {
+    await fsPromises.rename(tempFile.path, targetPath);
+  } else {
+    throw new Error('Aucun document à enregistrer.');
+  }
+
+  return updateProviderTariffDocumentPath(externalRef, targetFilename);
+};
+
+const buildProviderPayloadFromExcelRow = (row) => {
+  const getString = (key) => {
+    const value = row[key];
+    return value === undefined || value === null ? '' : value.toString().trim();
+  };
+
+  const features = splitMultiValueInput(row[EXCEL_TEMPLATE_COLUMNS.profileFeatures]).map((value) =>
+    value.toLowerCase()
+  );
+
+  const serviceCapabilities = splitMultiValueInput(
+    row[EXCEL_TEMPLATE_COLUMNS.serviceCapabilities]
+  ).map((value) => value.toLowerCase());
+
+  return {
+    name: getString(EXCEL_TEMPLATE_COLUMNS.name),
+    description: getString(EXCEL_TEMPLATE_COLUMNS.description),
+    coverage: getString(EXCEL_TEMPLATE_COLUMNS.coverage) || 'domestic',
+    contractFlexibility: getString(EXCEL_TEMPLATE_COLUMNS.contractFlexibility) || 'spot',
+    modes: splitMultiValueInput(row[EXCEL_TEMPLATE_COLUMNS.modes]).map((value) =>
+      value.toLowerCase()
+    ),
+    serviceCapabilities,
+    profile: {
+      address: getString(EXCEL_TEMPLATE_COLUMNS.address),
+      postalCode: getString(EXCEL_TEMPLATE_COLUMNS.postalCode),
+      city: getString(EXCEL_TEMPLATE_COLUMNS.city),
+      department: getString(EXCEL_TEMPLATE_COLUMNS.department),
+      contact: getString(EXCEL_TEMPLATE_COLUMNS.contact),
+      phone: getString(EXCEL_TEMPLATE_COLUMNS.phone),
+      email: getString(EXCEL_TEMPLATE_COLUMNS.email),
+      unreachable: parseExcelBoolean(row[EXCEL_TEMPLATE_COLUMNS.unreachable]),
+      features,
+      deliveryDepartments: parseDepartmentList(row[EXCEL_TEMPLATE_COLUMNS.deliveryDepartments]),
+      pickupDepartments: parseDepartmentList(row[EXCEL_TEMPLATE_COLUMNS.pickupDepartments]),
+      notes: getString(EXCEL_TEMPLATE_COLUMNS.profileNotes),
+    },
+  };
+};
+
+const extractSingleProviderFromExcel = (filePath) => {
+  const workbook = xlsx.readFile(filePath);
+  const [firstSheetName] = workbook.SheetNames;
+  if (!firstSheetName) {
+    return null;
+  }
+
+  const sheet = workbook.Sheets[firstSheetName];
+  const rows = xlsx.utils.sheet_to_json(sheet, { defval: '' });
+  const validRows = rows.filter((row) => {
+    const name = (row[EXCEL_TEMPLATE_COLUMNS.name] || '').toString().trim();
+    if (!name) {
+      return false;
+    }
+    return !name.startsWith('#');
+  });
+
+  if (!validRows.length) {
+    return null;
+  }
+
+  if (validRows.length > 1) {
+    throw new Error('Le fichier modèle doit contenir un seul transporteur par import.');
+  }
+
+  return buildProviderPayloadFromExcelRow(validRows[0]);
+};
+
+const buildProviderTemplateBuffer = () => {
+  const worksheet = xlsx.utils.aoa_to_sheet([EXCEL_TEMPLATE_HEADER_ORDER]);
+  const sampleRow = EXCEL_TEMPLATE_HEADER_ORDER.map(
+    (header) => EXCEL_TEMPLATE_SAMPLE_ROW[header] || ''
+  );
+  xlsx.utils.sheet_add_aoa(worksheet, [sampleRow], { origin: 'A2' });
+
+  const workbook = xlsx.utils.book_new();
+  xlsx.utils.book_append_sheet(workbook, worksheet, 'Transporteur');
+  return xlsx.write(workbook, { bookType: 'xlsx', type: 'buffer' });
+};
+
+const convertExcelFileToPdfBuffer = async (filePath) => {
+  const workbook = xlsx.readFile(filePath);
+  const [firstSheet] = workbook.SheetNames;
+  if (!firstSheet) {
+    throw new Error('Le fichier Excel est vide.');
+  }
+
+  const sheet = workbook.Sheets[firstSheet];
+  const rows = xlsx.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: '' });
+  if (!rows.length) {
+    throw new Error('Le fichier Excel ne contient aucune donnée.');
+  }
+
+  return await new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: 'A4', margin: 36 });
+    const chunks = [];
+    doc.on('data', (chunk) => chunks.push(chunk));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+
+    doc.fontSize(14).text('Grille tarifaire importée', { align: 'left' });
+    doc.moveDown();
+    doc.fontSize(10);
+
+    rows.forEach((row) => {
+      const line = row
+        .map((cell) => (cell === undefined || cell === null ? '' : String(cell)))
+        .join(' | ');
+      doc.text(line);
+      doc.moveDown(0.15);
+    });
+
+    doc.end();
+  });
+};
 
 const computeScore = (provider) => {
   const ratingScore = provider.customerSatisfaction * 20; // /5 *100
@@ -421,6 +735,11 @@ const applyFilters = (items, filters) =>
 const sortProviders = (items, sortBy, sortOrder) => {
   const orderMultiplier = sortOrder === 'desc' ? -1 : 1;
   return [...items].sort((a, b) => {
+    const aHasDoc = a && a.hasTariffDocument ? 1 : 0;
+    const bHasDoc = b && b.hasTariffDocument ? 1 : 0;
+    if (aHasDoc !== bHasDoc) {
+      return bHasDoc - aHasDoc; // Prioritize providers with a tariff document
+    }
     const aPriority = Number.isFinite(a.routePriority) ? a.routePriority : 0;
     const bPriority = Number.isFinite(b.routePriority) ? b.routePriority : 0;
 
@@ -948,6 +1267,170 @@ const deleteProviderEntry = async (req, res, next) => {
   }
 };
 
+const importSingleProviderWithTariff = async (req, res, next) => {
+  const providerFile = req.files?.providerExcel?.[0];
+  const tariffFile = req.files?.tariffPdf?.[0];
+
+  if (!providerFile) {
+    await cleanupUploadedFile(tariffFile);
+    return res.status(400).json({ error: 'Le fichier Excel du fournisseur est requis.' });
+  }
+
+  let excelPayload;
+  try {
+    excelPayload = extractSingleProviderFromExcel(providerFile.path);
+  } catch (error) {
+    await cleanupUploadedFile(providerFile);
+    await cleanupUploadedFile(tariffFile);
+    return res.status(400).json({ error: error.message || 'Fichier Excel invalide.' });
+  } finally {
+    await cleanupUploadedFile(providerFile);
+  }
+
+  if (!excelPayload) {
+    await cleanupUploadedFile(tariffFile);
+    return res.status(400).json({
+      error: 'Aucune donnée transporteur trouvée dans le modèle. Remplissez au moins une ligne.',
+    });
+  }
+
+  const { errors, value } = normalizeProviderPayload(excelPayload);
+  if (errors.length > 0) {
+    await cleanupUploadedFile(tariffFile);
+    return res.status(400).json({ error: errors.join(' ') });
+  }
+
+  try {
+    const created = await addProvider(value);
+    let finalProvider = created;
+
+    if (tariffFile) {
+      let tariffFileInfo;
+      try {
+        tariffFileInfo = resolveTariffFileInfo(tariffFile);
+      } catch (error) {
+        await cleanupUploadedFile(tariffFile);
+        return res.status(400).json({ error: error.message });
+      }
+
+      try {
+        let buffer = null;
+        if (tariffFileInfo.format === 'excel') {
+          buffer = await convertExcelFileToPdfBuffer(tariffFile.path);
+        }
+
+        const updated = await persistTariffDocumentForProvider(
+          created.id,
+          buffer ? null : tariffFile,
+          {
+            extension: '.pdf',
+            buffer,
+          }
+        );
+        if (updated) {
+          finalProvider = updated;
+        }
+      } catch (error) {
+        await cleanupUploadedFile(tariffFile);
+        return next(error);
+      }
+    }
+
+    await cleanupUploadedFile(tariffFile);
+
+    return res.status(201).json({
+      message: 'Fournisseur importé depuis le modèle Excel.',
+      data: enrichProvider(finalProvider),
+    });
+  } catch (error) {
+    await cleanupUploadedFile(tariffFile);
+    return next(error);
+  }
+};
+
+const uploadProviderTariffDocument = async (req, res, next) => {
+  const tempFile = req.file;
+
+  try {
+    const { id } = req.params;
+    if (!id) {
+      await cleanupUploadedFile(tempFile);
+      return res.status(400).json({ error: 'Identifiant fournisseur requis.' });
+    }
+
+    if (!tempFile) {
+      return res.status(400).json({ error: 'Aucun fichier reçu.' });
+    }
+
+    let fileInfo;
+    try {
+      fileInfo = resolveTariffFileInfo(tempFile);
+    } catch (error) {
+      await cleanupUploadedFile(tempFile);
+      return res.status(400).json({ error: error.message });
+    }
+
+    const meta = await getTariffDocumentDefinition(id);
+    if (!meta) {
+      await cleanupUploadedFile(tempFile);
+      return res.status(404).json({ error: 'Transporteur introuvable.' });
+    }
+
+    let buffer = null;
+    if (fileInfo.format === 'excel') {
+      try {
+        buffer = await convertExcelFileToPdfBuffer(tempFile.path);
+      } catch (error) {
+        await cleanupUploadedFile(tempFile);
+        return res
+          .status(400)
+          .json({ error: error.message || 'Impossible de convertir le fichier Excel.' });
+      }
+    }
+
+    let updatedProvider;
+    try {
+      updatedProvider = await persistTariffDocumentForProvider(meta.externalRef, buffer ? null : tempFile, {
+        extension: '.pdf',
+        explicitPath: meta.explicitPath,
+        buffer,
+      });
+    } catch (error) {
+      await cleanupUploadedFile(tempFile);
+      return next(error);
+    }
+
+    await cleanupUploadedFile(tempFile);
+
+    if (!updatedProvider) {
+      return res
+        .status(500)
+        .json({ error: 'Impossible de mettre à jour le transporteur.' });
+    }
+
+    return res.json({
+      message: 'Document tarifaire importé avec succès.',
+      data: enrichProvider(updatedProvider),
+    });
+  } catch (error) {
+    await cleanupUploadedFile(tempFile);
+    return next(error);
+  }
+};
+
+const downloadProviderImportTemplate = (_req, res) => {
+  const buffer = buildProviderTemplateBuffer();
+  res.setHeader(
+    'Content-Type',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  );
+  res.setHeader(
+    'Content-Disposition',
+    'attachment; filename="modele_import_transporteur.xlsx"'
+  );
+  return res.send(buffer);
+};
+
 const getProviderTariffDocument = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -1041,6 +1524,9 @@ module.exports = {
   createProvider,
   updateProvider: updateProviderEntry,
   deleteProvider: deleteProviderEntry,
+  importSingleProviderWithTariff,
+  uploadProviderTariffDocument,
+  downloadProviderImportTemplate,
   getProviderTariffDocument,
   getProviderBaseTariffGrid,
 };

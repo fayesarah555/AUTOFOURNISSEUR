@@ -33,6 +33,31 @@ const DEFAULT_DEPARTMENTS = [
   "90", "91", "92", "93", "94", "95"
 ];
 
+const TARIFF_FILE_ACCEPT = ".pdf,.xls,.xlsx";
+
+const detectTariffFileFormat = (file) => {
+  if (!file) {
+    return null;
+  }
+  const name = (file.name || '').toLowerCase();
+  const type = (file.type || '').toLowerCase();
+
+  if (name.endsWith('.pdf') || type.includes('pdf')) {
+    return 'pdf';
+  }
+  if (
+    name.endsWith('.xls') ||
+    name.endsWith('.xlsx') ||
+    type.includes('spreadsheet') ||
+    type.includes('excel')
+  ) {
+    return 'excel';
+  }
+  return null;
+};
+
+const getTariffFormatLabel = (format) => (format === 'excel' ? 'XLS' : 'PDF');
+
 const createDefaultFormState = () => ({
   id: "",
   name: "",
@@ -64,6 +89,19 @@ const AdminProviders = ({ onLogout }) => {
   const [importStatus, setImportStatus] = useState(null);
   const [importLoading, setImportLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
+  const [tariffUploadStatus, setTariffUploadStatus] = useState(null);
+  const [tariffUploadError, setTariffUploadError] = useState(null);
+  const [uploadingProviderId, setUploadingProviderId] = useState(null);
+  const tariffFileInputs = useRef({});
+  const excelProviderInputRef = useRef(null);
+  const excelTariffInputRef = useRef(null);
+  const [excelCreationState, setExcelCreationState] = useState({
+    providerFile: null,
+    tariffFile: null,
+    loading: false,
+    status: null,
+    error: null,
+  });
 
   const departmentOptions = useMemo(() => {
     const deliveryCodes = meta?.availableFilters?.deliveryDepartments || [];
@@ -73,6 +111,14 @@ const AdminProviders = ({ onLogout }) => {
       : DEFAULT_DEPARTMENTS;
     return codes.map((code) => ({ value: code, label: code }));
   }, [meta]);
+
+  const templateDownloadUrl = useMemo(() => {
+    const baseUrl = apiClient.defaults?.baseURL || '';
+    if (!baseUrl) {
+      return '/admin/providers/import/template';
+    }
+    return `${baseUrl.replace(/\/$/, '')}/admin/providers/import/template`;
+  }, []);
 
   const fetchProviders = async () => {
     setLoading(true);
@@ -308,6 +354,158 @@ const AdminProviders = ({ onLogout }) => {
     }
   };
 
+  const registerTariffInput = (providerId) => (node) => {
+    if (node) {
+      tariffFileInputs.current[providerId] = node;
+    } else {
+      delete tariffFileInputs.current[providerId];
+    }
+  };
+
+  const handleTariffUploadClick = (providerId) => {
+    const input = tariffFileInputs.current[providerId];
+    if (input) {
+      input.click();
+    }
+  };
+
+  const handleTariffFileChange = (provider) => async (event) => {
+    const file = event.target.files && event.target.files[0];
+    if (!file) {
+      return;
+    }
+
+    const resetInput = () => {
+      if (event.target) {
+        event.target.value = '';
+      }
+    };
+
+    const format = detectTariffFileFormat(file);
+    if (!format) {
+      setTariffUploadError('Veuillez sélectionner un PDF ou un Excel (.xls / .xlsx).');
+      setTariffUploadStatus(null);
+      resetInput();
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    setUploadingProviderId(provider.id);
+    setTariffUploadError(null);
+    setTariffUploadStatus(null);
+
+    try {
+      const response = await apiClient.post(
+        `/admin/providers/${encodeURIComponent(provider.id)}/tariff-document`,
+        formData,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        }
+      );
+      setTariffUploadStatus(
+        response.data?.message || 'Document tarifaire importé avec succès.'
+      );
+      setTariffUploadError(null);
+      fetchProviders();
+    } catch (err) {
+      setTariffUploadError(
+        err?.response?.data?.error || "Échec de l'import du PDF."
+      );
+      setTariffUploadStatus(null);
+    } finally {
+      setUploadingProviderId(null);
+      resetInput();
+    }
+  };
+
+  const handleExcelCreationFileChange = (field) => (event) => {
+    const file = event.target.files && event.target.files[0] ? event.target.files[0] : null;
+
+    if (field === 'tariffFile' && file) {
+      const format = detectTariffFileFormat(file);
+      if (!format) {
+        if (event.target) {
+          event.target.value = '';
+        }
+        setExcelCreationState((prev) => ({
+          ...prev,
+          error: 'La grille tarifaire doit être un PDF ou un Excel (.xls / .xlsx).',
+          status: null,
+        }));
+        return;
+      }
+    }
+
+    setExcelCreationState((prev) => ({
+      ...prev,
+      [field]: file,
+      status: null,
+      error: null,
+    }));
+  };
+
+  const resetExcelInputs = () => {
+    if (excelProviderInputRef.current) {
+      excelProviderInputRef.current.value = '';
+    }
+    if (excelTariffInputRef.current) {
+      excelTariffInputRef.current.value = '';
+    }
+  };
+
+  const handleExcelCreationSubmit = async (event) => {
+    event.preventDefault();
+    if (!excelCreationState.providerFile) {
+      setExcelCreationState((prev) => ({
+        ...prev,
+        error: 'Veuillez sélectionner le fichier Excel du fournisseur.',
+        status: null,
+      }));
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('providerExcel', excelCreationState.providerFile);
+    if (excelCreationState.tariffFile) {
+      formData.append('tariffPdf', excelCreationState.tariffFile);
+    }
+
+    setExcelCreationState((prev) => ({
+      ...prev,
+      loading: true,
+      error: null,
+      status: null,
+    }));
+
+    try {
+      const response = await apiClient.post('/admin/providers/import-single', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      setExcelCreationState({
+        providerFile: null,
+        tariffFile: null,
+        loading: false,
+        status: response.data?.message || 'Fournisseur importé depuis Excel.',
+        error: null,
+      });
+      resetExcelInputs();
+      fetchProviders();
+    } catch (err) {
+      setExcelCreationState((prev) => ({
+        ...prev,
+        loading: false,
+        error: err?.response?.data?.error || "Échec de l'import du modèle Excel.",
+      }));
+    }
+  };
+
   const pageSizeOptions = useMemo(() => meta?.pageSizeOptions || [10, 20, 30, 50], [meta]);
 
   return (
@@ -340,6 +538,74 @@ const AdminProviders = ({ onLogout }) => {
       </header>
 
       {importStatus && <div className="import-status">{importStatus}</div>}
+      {tariffUploadError && <div className="import-status error">{tariffUploadError}</div>}
+      {tariffUploadStatus && <div className="import-status">{tariffUploadStatus}</div>}
+
+      <section className="creation-modes">
+        <div className="creation-card">
+          <h3>Création via formulaire</h3>
+          <p>
+            Renseignez toutes les informations du transporteur manuellement puis ajoutez la grille
+            tarifaire PDF depuis la liste des fournisseurs.
+          </p>
+          <div className="creation-card-actions">
+            <button type="button" className="btn" onClick={openCreateModal}>
+              Ouvrir le formulaire
+            </button>
+          </div>
+        </div>
+        <div className="creation-card">
+          <h3>Import via modèle Excel</h3>
+          <p>
+            Téléchargez le modèle, complétez une seule ligne avec les informations du transporteur
+            puis, si disponible, joignez la grille tarifaire PDF correspondante.
+          </p>
+          <a
+            className="template-link"
+            href={templateDownloadUrl}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Télécharger le modèle Excel
+          </a>
+          <form className="excel-import-form" onSubmit={handleExcelCreationSubmit}>
+            <label>
+              <span>Fichier fournisseur (Excel) *</span>
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                ref={excelProviderInputRef}
+                onChange={handleExcelCreationFileChange('providerFile')}
+                required
+              />
+              {excelCreationState.providerFile && (
+                <small className="file-name">{excelCreationState.providerFile.name}</small>
+              )}
+            </label>
+            <label>
+              <span>Grille tarifaire (PDF ou Excel)</span>
+              <input
+                type="file"
+                accept={TARIFF_FILE_ACCEPT}
+                ref={excelTariffInputRef}
+                onChange={handleExcelCreationFileChange('tariffFile')}
+              />
+              {excelCreationState.tariffFile && (
+                <small className="file-name">{excelCreationState.tariffFile.name}</small>
+              )}
+            </label>
+            <button type="submit" className="btn" disabled={excelCreationState.loading}>
+              {excelCreationState.loading ? 'Import en cours…' : 'Créer ce fournisseur'}
+            </button>
+          </form>
+          {excelCreationState.error && (
+            <div className="import-status error">{excelCreationState.error}</div>
+          )}
+          {excelCreationState.status && (
+            <div className="import-status">{excelCreationState.status}</div>
+          )}
+        </div>
+      </section>
 
       <section className="admin-list-section">
         <div className="admin-list-controls">
@@ -387,22 +653,60 @@ const AdminProviders = ({ onLogout }) => {
                 </tr>
               </thead>
               <tbody>
-                {providers.map((provider) => (
-                  <tr key={provider.id}>
-                    <td>{provider.name}</td>
-                    <td>{provider.profile?.address || '--'}</td>
-                    <td>{provider.profile?.contact || '--'}</td>
-                    <td>{provider.profile?.phone || '--'}</td>
-                    <td className="table-actions">
-                      <button type="button" onClick={() => openEditModal(provider)}>
-                        Modifier
-                      </button>
-                      <button type="button" className="danger" onClick={() => handleDelete(provider.id)}>
-                        Supprimer
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                    {providers.map((provider) => {
+                      const tariffFormatLabel = provider.hasTariffDocument
+                        ? getTariffFormatLabel(provider.tariffDocumentFormat)
+                        : null;
+                      const manageButtonLabel = uploadingProviderId === provider.id
+                        ? 'Import en cours...'
+                        : provider.hasTariffDocument
+                        ? `Remplacer ${tariffFormatLabel}`
+                        : 'Ajouter PDF / XLS';
+                      return (
+                        <tr key={provider.id}>
+                          <td>{provider.name}</td>
+                          <td>{provider.profile?.address || '--'}</td>
+                          <td>{provider.profile?.contact || '--'}</td>
+                          <td>{provider.profile?.phone || '--'}</td>
+                          <td className="table-actions">
+                            <button type="button" onClick={() => openEditModal(provider)}>
+                              Modifier
+                            </button>
+                            <button
+                              type="button"
+                              className="danger"
+                              onClick={() => handleDelete(provider.id)}
+                            >
+                              Supprimer
+                            </button>
+                            <div className="tariff-upload-group">
+                              <input
+                                type="file"
+                                accept={TARIFF_FILE_ACCEPT}
+                                ref={registerTariffInput(provider.id)}
+                                style={{ display: 'none' }}
+                                onChange={handleTariffFileChange(provider)}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleTariffUploadClick(provider.id)}
+                                disabled={uploadingProviderId === provider.id}
+                              >
+                                {manageButtonLabel}
+                              </button>
+                              {provider.tariffDocumentFilename && (
+                                <small
+                                  className="tariff-upload-hint"
+                                  title={provider.tariffDocumentFilename}
+                                >
+                                  {provider.tariffDocumentFilename}
+                                </small>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
               </tbody>
             </table>
           )}

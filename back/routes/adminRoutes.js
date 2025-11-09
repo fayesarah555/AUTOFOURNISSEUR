@@ -6,6 +6,9 @@ const {
   createProvider,
   updateProvider,
   deleteProvider,
+  importSingleProviderWithTariff,
+  uploadProviderTariffDocument,
+  downloadProviderImportTemplate,
 } = require('../controllers/providerController');
 const { importExcelProviders } = require('../controllers/providerImportController');
 const path = require('path');
@@ -24,11 +27,33 @@ const upload = multer({
   },
 });
 
+const providerExcelUpload = upload.fields([
+  { name: 'providerExcel', maxCount: 1 },
+  { name: 'tariffPdf', maxCount: 1 },
+]);
+
 router.get('/providers', requireAdmin, listProviders);
 router.get('/providers/:id', requireAdmin, getProviderById);
 router.post('/providers', requireAdmin, createProvider);
 router.put('/providers/:id', requireAdmin, updateProvider);
 router.delete('/providers/:id', requireAdmin, deleteProvider);
 router.post('/providers/import', requireAdmin, upload.single('file'), importExcelProviders);
+router.post(
+  '/providers/import-single',
+  requireAdmin,
+  providerExcelUpload,
+  importSingleProviderWithTariff
+);
+router.post(
+  '/providers/:id/tariff-document',
+  requireAdmin,
+  upload.single('file'),
+  uploadProviderTariffDocument
+);
+router.get(
+  '/providers/import/template',
+  requireAdmin,
+  downloadProviderImportTemplate
+);
 
 module.exports = router;
