@@ -782,14 +782,23 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
       return;
     }
 
-    const baseUrl =
-      provider.tariffDocumentUrl && provider.tariffDocumentUrl.trim().length > 0
-        ? provider.tariffDocumentUrl
-        : (() => {
-            const apiBase = (apiClient.defaults?.baseURL || '').replace(/\/$/, '');
-            const id = encodeURIComponent(provider.id);
-            return apiBase ? `${apiBase}/api/providers/${id}/tariff-document` : `/api/providers/${id}/tariff-document`;
-          })();
+    let baseUrl = (provider.tariffDocumentUrl || '').trim();
+    if (baseUrl) {
+      // If relative, prefix with API base URL when available
+      const isAbsolute = /^https?:\/\//i.test(baseUrl);
+      if (!isAbsolute) {
+        const apiBase = (apiClient.defaults?.baseURL || '').replace(/\/$/, '');
+        if (apiBase) {
+          baseUrl = `${apiBase}${baseUrl.startsWith('/') ? '' : '/'}${baseUrl}`;
+        }
+      }
+    } else {
+      const apiBase = (apiClient.defaults?.baseURL || '').replace(/\/$/, '');
+      const id = encodeURIComponent(provider.id);
+      baseUrl = apiBase
+        ? `${apiBase}/api/providers/${id}/tariff-document`
+        : `/api/providers/${id}/tariff-document`;
+    }
 
     setTariffModal({
       open: true,

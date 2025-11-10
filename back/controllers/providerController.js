@@ -1633,15 +1633,23 @@ const buildTariffGridTemplateBuffer = () => {
     '2 palettes (EUR)',
     '3 palettes (EUR)',
     '4 palettes (EUR)',
+    '5 palettes (EUR)',
     'Prix au km (optionnel)'
   ];
-  const data = [
+
+  // Exemple complet couvrant départements et plages de distances
+  const rows = [
     header,
-    ['Ex: 0-50 km', '', '', '', '', ''],
-    ['Ex: 51-100 km', '', '', '', '', ''],
-    ['Ex: Paris (75)', '', '', '', '', ''],
+    // Par département (code ou libellé + code)
+    ['Paris (75)', 120, 210, 300, 380, 450, ''],
+    ['69',         110, 195, 280, 360, 430, ''],
+    // Par plages de distances (avec prix au km renseigné)
+    ['0-50 km',    90,  160, 230, 300, 360, 1.10],
+    ['51-100 km',  130, 210, 290, 370, 440, 1.30],
+    ['101-200 km', 180, 270, 360, 450, 530, 1.50],
   ];
-  const worksheet = xlsx.utils.aoa_to_sheet(data);
+
+  const worksheet = xlsx.utils.aoa_to_sheet(rows);
   xlsx.utils.book_append_sheet(workbook, worksheet, 'Grille');
   return xlsx.write(workbook, { bookType: 'xlsx', type: 'buffer' });
 };
