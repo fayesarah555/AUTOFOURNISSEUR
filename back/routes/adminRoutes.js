@@ -9,6 +9,8 @@ const {
   importSingleProviderWithTariff,
   uploadProviderTariffDocument,
   downloadProviderImportTemplate,
+  downloadTariffGridTemplate,
+  importTariffCatalogFromExcel,
 } = require('../controllers/providerController');
 const { importExcelProviders } = require('../controllers/providerImportController');
 const path = require('path');
@@ -50,10 +52,22 @@ router.post(
   upload.single('file'),
   uploadProviderTariffDocument
 );
+router.post(
+  '/providers/:id/tariff-catalogs/import',
+  requireAdmin,
+  upload.single('file'),
+  importTariffCatalogFromExcel
+);
 router.get(
   '/providers/import/template',
   requireAdmin,
   downloadProviderImportTemplate
+);
+
+router.get(
+  '/providers/tariff/template',
+  requireAdmin,
+  downloadTariffGridTemplate
 );
 
 module.exports = router;

@@ -162,6 +162,18 @@
   margin-bottom: 16px;
 }
 
+.admin-list-controls .search-inline {
+  flex: 1 1 auto;
+}
+
+.admin-list-controls .search-inline input[type="text"] {
+  width: 100%;
+  max-width: 420px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border, #e3e7f0);
+  border-radius: 8px;
+}
+
 .admin-list-controls label {
   display: flex;
   flex-direction: column;

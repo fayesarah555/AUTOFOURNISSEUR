@@ -83,6 +83,7 @@ const AdminProviders = ({ onLogout }) => {
   const [error, setError] = useState(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+  const [searchText, setSearchText] = useState('');
   const [formState, setFormState] = useState(() => createDefaultFormState());
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -98,6 +99,17 @@ const AdminProviders = ({ onLogout }) => {
   const [excelCreationState, setExcelCreationState] = useState({
     providerFile: null,
     tariffFile: null,
+    loading: false,
+    status: null,
+    error: null,
+  });
+
+  // Modal d'import de grille pour un fournisseur existant
+  const [tariffImportModalOpen, setTariffImportModalOpen] = useState(false);
+  const [tariffImportState, setTariffImportState] = useState({
+    providerId: '',
+    file: null,
+    mode: 'document', // 'document' | 'catalog'
     loading: false,
     status: null,
     error: null,
@@ -120,6 +132,58 @@ const AdminProviders = ({ onLogout }) => {
     return `${baseUrl.replace(/\/$/, '')}/admin/providers/import/template`;
   }, []);
 
+  const openTariffImportModal = () => {
+    setTariffImportState({ providerId: '', file: null, loading: false, status: null, error: null });
+    setTariffImportModalOpen(true);
+  };
+  const closeTariffImportModal = () => setTariffImportModalOpen(false);
+  const openTariffImportFor = (providerId) => {
+    setTariffImportState({ providerId, file: null, loading: false, status: null, error: null });
+    setTariffImportModalOpen(true);
+  };
+  const handleTariffImportChange = (field) => (e) => {
+    if (field === 'providerId') {
+      setTariffImportState((prev) => ({ ...prev, providerId: e.target.value }));
+    } else if (field === 'file') {
+      const file = e.target.files && e.target.files[0] ? e.target.files[0] : null;
+      setTariffImportState((prev) => ({ ...prev, file }));
+    } else if (field === 'mode') {
+      setTariffImportState((prev) => ({ ...prev, mode: e.target.value }));
+    }
+  };
+  const handleTariffImportSubmit = async (event) => {
+    event.preventDefault();
+    const { providerId, file, mode } = tariffImportState;
+    if (!providerId) {
+      setTariffImportState((s) => ({ ...s, error: 'Veuillez sélectionner un fournisseur.' }));
+      return;
+    }
+    if (!file) {
+      setTariffImportState((s) => ({ ...s, error: 'Veuillez sélectionner un fichier PDF ou Excel.' }));
+      return;
+    }
+    const name = (file.name || '').toLowerCase();
+    if (!(name.endsWith('.pdf') || name.endsWith('.xls') || name.endsWith('.xlsx'))) {
+      setTariffImportState((s) => ({ ...s, error: 'Le fichier doit être un PDF ou un Excel (.xls / .xlsx).' }));
+      return;
+    }
+    try {
+      setTariffImportState((s) => ({ ...s, loading: true, error: null, status: null }));
+      const formData = new FormData();
+      formData.append('file', file);
+      const endpoint = mode === 'catalog'
+        ? `/admin/providers/${encodeURIComponent(providerId)}/tariff-catalogs/import`
+        : `/admin/providers/${encodeURIComponent(providerId)}/tariff-document`;
+      const response = await apiClient.post(endpoint, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setTariffImportState((s) => ({ ...s, loading: false, status: response.data?.message || 'Import réalisé avec succès.' }));
+      fetchProviders();
+    } catch (err) {
+      setTariffImportState((s) => ({ ...s, loading: false, error: err?.response?.data?.error || "Échec de l'import de la grille." }));
+    }
+  };
+
   const fetchProviders = async () => {
     setLoading(true);
     setError(null);
@@ -130,6 +194,7 @@ const AdminProviders = ({ onLogout }) => {
           pageSize,
           sortBy: 'name',
           sortOrder: 'asc',
+          q: (searchText || '').trim(),
         },
       });
       setProviders(response.data.data || []);
@@ -143,7 +208,7 @@ const AdminProviders = ({ onLogout }) => {
 
   useEffect(() => {
     fetchProviders();
-  }, [page, pageSize]);
+  }, [page, pageSize, searchText]);
 
   const openCreateModal = () => {
     setFormState(createDefaultFormState());
@@ -555,10 +620,11 @@ const AdminProviders = ({ onLogout }) => {
           </div>
         </div>
         <div className="creation-card">
-          <h3>Import via modèle Excel</h3>
+          <h3>Importer un fournisseur via modèle Excel</h3>
           <p>
-            Téléchargez le modèle, complétez une seule ligne avec les informations du transporteur
-            puis, si disponible, joignez la grille tarifaire PDF correspondante.
+            Téléchargez le modèle et complétez une seule ligne avec les informations du transporteur.
+            Une fois le fournisseur créé et visible dans la liste, importez sa grille (PDF ou Excel)
+            depuis la colonne Actions de la ligne correspondante.
           </p>
           <a
             className="template-link"
@@ -582,18 +648,6 @@ const AdminProviders = ({ onLogout }) => {
                 <small className="file-name">{excelCreationState.providerFile.name}</small>
               )}
             </label>
-            <label>
-              <span>Grille tarifaire (PDF ou Excel)</span>
-              <input
-                type="file"
-                accept={TARIFF_FILE_ACCEPT}
-                ref={excelTariffInputRef}
-                onChange={handleExcelCreationFileChange('tariffFile')}
-              />
-              {excelCreationState.tariffFile && (
-                <small className="file-name">{excelCreationState.tariffFile.name}</small>
-              )}
-            </label>
             <button type="submit" className="btn" disabled={excelCreationState.loading}>
               {excelCreationState.loading ? 'Import en cours…' : 'Créer ce fournisseur'}
             </button>
@@ -605,10 +659,38 @@ const AdminProviders = ({ onLogout }) => {
             <div className="import-status">{excelCreationState.status}</div>
           )}
         </div>
+        <div className="creation-card">
+          <h3>Modèle de grille tarifaire</h3>
+          <p>
+            Téléchargez un modèle Excel de grille tarifaire à remplir pour un transporteur, puis utilisez la colonne “Actions” de la liste pour importer le fichier.
+          </p>
+          <div className="creation-card-actions">
+            <a
+              className="btn"
+              href={(apiClient.defaults?.baseURL || '').replace(/\/$/, '') + '/admin/providers/tariff/template'}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Télécharger le modèle de grille
+            </a>
+          </div>
+        </div>
       </section>
 
       <section className="admin-list-section">
         <div className="admin-list-controls">
+          <label className="search-inline">
+            <span>Recherche</span>
+            <input
+              type="text"
+              placeholder="Nom, adresse, contact, ville, département…"
+              value={searchText}
+              onChange={(e) => {
+                setSearchText(e.target.value);
+                setPage(1);
+              }}
+            />
+          </label>
           <label>
             <span>Résultats / page</span>
             <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))}>
@@ -702,6 +784,13 @@ const AdminProviders = ({ onLogout }) => {
                                   {provider.tariffDocumentFilename}
                                 </small>
                               )}
+                              <button
+                                type="button"
+                                onClick={() => openTariffImportFor(provider.id)}
+                                title="Importer une grille via formulaire"
+                              >
+                                Importer (modal)
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -832,6 +921,64 @@ const AdminProviders = ({ onLogout }) => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {tariffImportModalOpen && (
+        <div className="admin-modal">
+          <div className="admin-modal-content">
+            <h2>Importer une grille tarifaire</h2>
+            <form className="admin-form" onSubmit={handleTariffImportSubmit}>
+              <label>
+                <span>Mode d'import *</span>
+                <select value={tariffImportState.mode} onChange={handleTariffImportChange('mode')} required>
+                  <option value="document">Document (PDF / Excel converti en PDF)</option>
+                  <option value="catalog">Grille en base (Excel modèle)</option>
+                </select>
+              </label>
+              <label>
+                <span>Fournisseur *</span>
+                <select
+                  value={tariffImportState.providerId}
+                  onChange={handleTariffImportChange('providerId')}
+                  required
+                >
+                  <option value="">-- Sélectionner --</option>
+                  {providers.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Grille tarifaire (PDF ou Excel) *</span>
+                <input
+                  type="file"
+                  accept={TARIFF_FILE_ACCEPT}
+                  onChange={handleTariffImportChange('file')}
+                  required
+                />
+                {tariffImportState.file && (
+                  <small className="file-name">{tariffImportState.file.name}</small>
+                )}
+              </label>
+              <div className="form-actions">
+                <button type="submit" className="btn primary" disabled={tariffImportState.loading}>
+                  {tariffImportState.loading ? 'Import en cours…' : 'Importer'}
+                </button>
+                <button type="button" className="btn" onClick={closeTariffImportModal}>
+                  Annuler
+                </button>
+              </div>
+            </form>
+            {tariffImportState.error && (
+              <div className="import-status error">{tariffImportState.error}</div>
+            )}
+            {tariffImportState.status && (
+              <div className="import-status">{tariffImportState.status}</div>
+            )}
           </div>
         </div>
       )}

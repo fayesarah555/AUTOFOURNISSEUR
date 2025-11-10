@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon --watch . --ext js,json --exec node index.js",
-    "import:excel": "node scripts/importExcel.js"
+    "import:excel": "node scripts/importExcel.js",
+    "generate:pallet-seed": "node scripts/generate_pallet_inserts.js"
   },
   "dependencies": {
     "cookie-session": "^2.1.0",

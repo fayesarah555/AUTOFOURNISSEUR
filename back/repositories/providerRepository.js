@@ -459,4 +459,49 @@ module.exports = {
   deleteProvider,
   updateProviderTariffDocumentPath,
   resetProviders,
+  // Tariff DB helpers
+  createTariffCatalogForSupplier: async (supplierId, { label, currency = 'EUR', incoterm = null, validFrom = null, validTo = null, comment = null } = {}) => {
+    if (!supplierId) {
+      throw new Error('supplierId requis');
+    }
+    const resolvedLabel = label || `Grille importée ${new Date().toISOString().slice(0, 10)}`;
+    const sql = `
+      INSERT INTO tariff_catalogs (supplier_id, label, currency, incoterm, valid_from, valid_to, comment)
+      VALUES (?, ?, ?, ?, COALESCE(?, CURRENT_DATE), ?, ?)
+    `;
+    const result = await pool.query(sql, [supplierId, resolvedLabel, currency, incoterm, validFrom, validTo, comment]);
+    return Number(result.insertId);
+  },
+  bulkInsertTariffLines: async (catalogId, lines) => {
+    if (!catalogId || !Array.isArray(lines) || lines.length === 0) {
+      return 0;
+    }
+    const columns = [
+      'tariff_catalog_id',
+      'origin_department',
+      'destination_department',
+      'min_distance_km',
+      'max_distance_km',
+      'pallet_count',
+      'base_price',
+      'price_per_km',
+    ];
+    const placeholders = lines.map(() => `(${columns.map(() => '?').join(',')})`).join(',');
+    const values = [];
+    lines.forEach((l) => {
+      values.push(
+        catalogId,
+        l.origin_department || null,
+        l.destination_department || null,
+        l.min_distance_km ?? null,
+        l.max_distance_km ?? null,
+        l.pallet_count ?? null,
+        l.base_price ?? null,
+        l.price_per_km ?? null
+      );
+    });
+    const sql = `INSERT INTO tariff_lines (${columns.join(',')}) VALUES ${placeholders}`;
+    const result = await pool.query(sql, values);
+    return Number(result.affectedRows || 0);
+  },
 };

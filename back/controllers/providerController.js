@@ -1431,6 +1431,41 @@ const downloadProviderImportTemplate = (_req, res) => {
   return res.send(buffer);
 };
 
+// Génère un modèle Excel simple pour une grille tarifaire à remplir
+const buildTariffGridTemplateBuffer = () => {
+  const workbook = xlsx.utils.book_new();
+  const header = [
+    'Destination / Distance',
+    '1 palette (EUR)',
+    '2 palettes (EUR)',
+    '3 palettes (EUR)',
+    '4 palettes (EUR)',
+    'Prix au km (optionnel)'
+  ];
+  const data = [
+    header,
+    ['Ex: 0-50 km', '', '', '', '', ''],
+    ['Ex: 51-100 km', '', '', '', '', ''],
+    ['Ex: Paris (75)', '', '', '', '', ''],
+  ];
+  const worksheet = xlsx.utils.aoa_to_sheet(data);
+  xlsx.utils.book_append_sheet(workbook, worksheet, 'Grille');
+  return xlsx.write(workbook, { bookType: 'xlsx', type: 'buffer' });
+};
+
+const downloadTariffGridTemplate = (_req, res) => {
+  const buffer = buildTariffGridTemplateBuffer();
+  res.setHeader(
+    'Content-Type',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  );
+  res.setHeader(
+    'Content-Disposition',
+    'attachment; filename="modele_grille_tarifaire.xlsx"'
+  );
+  return res.send(buffer);
+};
+
 const getProviderTariffDocument = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -1527,9 +1562,138 @@ module.exports = {
   importSingleProviderWithTariff,
   uploadProviderTariffDocument,
   downloadProviderImportTemplate,
+  downloadTariffGridTemplate,
+  importTariffCatalogFromExcel,
   getProviderTariffDocument,
   getProviderBaseTariffGrid,
 };
+
+// Importe une grille tarifaire (catalogue + lignes) pour un fournisseur existant à partir d'un modèle Excel
+async function importTariffCatalogFromExcel(req, res, next) {
+  const tempFile = req.file;
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Identifiant fournisseur requis.' });
+    }
+    if (!tempFile?.path) {
+      return res.status(400).json({ error: 'Aucun fichier reçu.' });
+    }
+
+    const workbook = xlsx.readFile(tempFile.path);
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    if (!sheet) {
+      await cleanupUploadedFile(tempFile);
+      return res.status(400).json({ error: 'Fichier Excel vide.' });
+    }
+
+    const rows = xlsx.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: '' });
+    if (rows.length < 2) {
+      await cleanupUploadedFile(tempFile);
+      return res.status(400).json({ error: 'Modèle invalide: en-têtes manquants.' });
+    }
+
+    const header = rows[0].map((c) => (c || '').toString().trim());
+    const destColIndex = 0;
+    // Colonnes palette: détecter "X palette" dans l'en-tête
+    const paletteCols = [];
+    header.forEach((label, idx) => {
+      const m = label.match(/^(\d+)\s*palette/iu);
+      if (m) {
+        const count = Number.parseInt(m[1], 10);
+        if (Number.isFinite(count) && count > 0) {
+          paletteCols.push({ idx, count });
+        }
+      }
+    });
+    const pricePerKmCol = header.findIndex((h) => h.toLowerCase().includes('prix au km'));
+
+    const meta = await getTariffDocumentDefinition(id);
+    if (!meta) {
+      await cleanupUploadedFile(tempFile);
+      return res.status(404).json({ error: 'Transporteur introuvable.' });
+    }
+    const provider = await findProviderById(id);
+    const originDepartment = resolveDepartureDepartment(provider);
+
+    const parseDestination = (value) => {
+      const raw = (value || '').toString().trim();
+      if (!raw) return { type: 'none' };
+      // Plage de distances: "0-50 km"
+      const mDist = raw.match(/^(\d+(?:[\.,]\d+)?)\s*-\s*(\d+(?:[\.,]\d+)?)\s*km$/i);
+      if (mDist) {
+        const a = Number(mDist[1].replace(',', '.'));
+        const b = Number(mDist[2].replace(',', '.'));
+        if (Number.isFinite(a) && Number.isFinite(b)) {
+          return { type: 'distance', min: Math.min(a, b), max: Math.max(a, b) };
+        }
+      }
+      // Département avec code entre parenthèses: "Paris (75)"
+      const mDeptParen = raw.match(/\((\d{2})\)/);
+      if (mDeptParen) {
+        return { type: 'department', code: mDeptParen[1] };
+      }
+      // Code département brut (ex: "75")
+      const mDept = raw.match(/^(\d{2})$/);
+      if (mDept) {
+        return { type: 'department', code: mDept[1] };
+      }
+      return { type: 'unknown' };
+    };
+
+    const lines = [];
+    for (let r = 1; r < rows.length; r += 1) {
+      const row = rows[r];
+      if (!row || row.length === 0) continue;
+      const dest = parseDestination(row[destColIndex]);
+      if (dest.type === 'none' || dest.type === 'unknown') continue;
+      const pricePerKm = pricePerKmCol >= 0 ? Number(row[pricePerKmCol].toString().replace(',', '.')) : null;
+
+      for (const col of paletteCols) {
+        const rawPrice = row[col.idx];
+        if (rawPrice === undefined || rawPrice === null || rawPrice === '') continue;
+        const price = Number(rawPrice.toString().replace(',', '.'));
+        if (!Number.isFinite(price)) continue;
+        const line = {
+          origin_department: originDepartment || null,
+          destination_department: dest.type === 'department' ? dest.code : null,
+          min_distance_km: dest.type === 'distance' ? dest.min : null,
+          max_distance_km: dest.type === 'distance' ? dest.max : null,
+          pallet_count: col.count,
+          base_price: price,
+          price_per_km: Number.isFinite(pricePerKm) ? pricePerKm : null,
+        };
+        lines.push(line);
+      }
+    }
+
+    if (lines.length === 0) {
+      await cleanupUploadedFile(tempFile);
+      return res.status(400).json({ error: 'Aucune ligne tarifaire valide trouvée dans le fichier.' });
+    }
+
+    // Créer un catalogue et insérer les lignes
+    const label = `Grille importée ${new Date().toLocaleDateString('fr-FR')}`;
+    let catalogId;
+    try {
+      const repo = require('../repositories/providerRepository');
+      catalogId = await repo.createTariffCatalogForSupplier(meta.supplierId, { label });
+      await repo.bulkInsertTariffLines(catalogId, lines);
+    } catch (dbError) {
+      await cleanupUploadedFile(tempFile);
+      return next(dbError);
+    }
+
+    await cleanupUploadedFile(tempFile);
+    return res.json({ message: 'Grille tarifaire importée en base.', data: { catalogId, lines: lines.length } });
+  } catch (error) {
+    await cleanupUploadedFile(tempFile).catch(() => {});
+    return next(error);
+  }
+}
+
+/* duplicate removed */
 
 
 

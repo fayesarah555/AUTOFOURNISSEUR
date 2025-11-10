@@ -305,6 +305,7 @@ CREATE TABLE IF NOT EXISTS tariff_surcharges (
 
 ALTER TABLE suppliers
   MODIFY COLUMN source_sheet ENUM('TPS_National','TPS_Espagnols','CUSTOM') DEFAULT 'TPS_National',
+  ADD COLUMN IF NOT EXISTS tariff_document_url VARCHAR(255) AFTER website,
   ADD COLUMN IF NOT EXISTS description TEXT AFTER name,
   ADD COLUMN IF NOT EXISTS coverage ENUM('domestic','regional','europe','global') NOT NULL DEFAULT 'domestic' AFTER status,
   ADD COLUMN IF NOT EXISTS contract_flexibility ENUM('spot','monthly','quarterly','annual') NOT NULL DEFAULT 'spot' AFTER coverage,
@@ -321,3 +322,77 @@ ALTER TABLE suppliers
   ADD COLUMN IF NOT EXISTS unreachable TINYINT(1) NOT NULL DEFAULT 0 AFTER certifications_json,
   ADD COLUMN IF NOT EXISTS profile_notes TEXT AFTER unreachable,
   ADD COLUMN IF NOT EXISTS notes TEXT AFTER profile_notes;
+
+-- -------------------------------------------------------------------
+-- 6. Palettisation & documents tarifaires (nouveaux modules)
+-- -------------------------------------------------------------------
+
+-- Formats palette standardisés (ex: 80x120, 100x120)
+CREATE TABLE IF NOT EXISTS pallet_formats (
+  id                 BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  code               VARCHAR(32)  NOT NULL UNIQUE,
+  label              VARCHAR(64)  NOT NULL,
+  length_mm          INT UNSIGNED,
+  width_mm           INT UNSIGNED,
+  height_mm          INT UNSIGNED NULL,
+  base_linear_meter  DECIMAL(8,3) NULL,
+  default_weight_kg  DECIMAL(10,2) NULL,
+  created_at         DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at         DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+-- Options par format: n palettes -> mètres linéaires / tonnage
+CREATE TABLE IF NOT EXISTS pallet_format_options (
+  id                 BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  pallet_format_id   BIGINT UNSIGNED NOT NULL,
+  pallet_count       SMALLINT UNSIGNED NOT NULL,
+  linear_meters      DECIMAL(8,3) NOT NULL,
+  max_weight_kg      DECIMAL(10,2) NULL,
+  UNIQUE KEY uq_pallet_format_count (pallet_format_id, pallet_count),
+  CONSTRAINT fk_pallet_option_format
+    FOREIGN KEY (pallet_format_id) REFERENCES pallet_formats(id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- Association (optionnelle) des formats gérés par fournisseur
+CREATE TABLE IF NOT EXISTS supplier_pallet_formats (
+  supplier_id        BIGINT UNSIGNED NOT NULL,
+  pallet_format_id   BIGINT UNSIGNED NOT NULL,
+  PRIMARY KEY (supplier_id, pallet_format_id),
+  CONSTRAINT fk_spf_supplier
+    FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_spf_format
+    FOREIGN KEY (pallet_format_id) REFERENCES pallet_formats(id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- Historisation des documents tarifaires (PDF/Excel)
+CREATE TABLE IF NOT EXISTS tariff_documents (
+  id                 BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  supplier_id        BIGINT UNSIGNED NOT NULL,
+  storage_type       ENUM('local','remote') NOT NULL DEFAULT 'local',
+  filename           VARCHAR(255),
+  url                VARCHAR(512),
+  format             ENUM('pdf','excel') NOT NULL DEFAULT 'pdf',
+  uploaded_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  notes              TEXT,
+  KEY idx_td_supplier (supplier_id),
+  CONSTRAINT fk_td_supplier
+    FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- Etendre les lignes de tarifs pour coller aux modèles Excel (distance & palettes)
+ALTER TABLE tariff_lines
+  ADD COLUMN IF NOT EXISTS pallet_format_id     BIGINT UNSIGNED NULL,
+  ADD COLUMN IF NOT EXISTS pallet_count         SMALLINT UNSIGNED NULL,
+  ADD COLUMN IF NOT EXISTS pallet_linear_meters DECIMAL(8,3) NULL,
+  ADD COLUMN IF NOT EXISTS min_distance_km      DECIMAL(10,1) NULL,
+  ADD COLUMN IF NOT EXISTS max_distance_km      DECIMAL(10,1) NULL,
+  ADD KEY IF NOT EXISTS idx_tariff_lines_lookup (tariff_catalog_id, destination_department, min_distance_km, max_distance_km, pallet_count),
+  ADD KEY IF NOT EXISTS idx_tariff_lines_pallet_format (pallet_format_id),
+  ADD CONSTRAINT fk_tariff_lines_pallet_format
+    FOREIGN KEY (pallet_format_id) REFERENCES pallet_formats(id)
+    ON DELETE SET NULL;
