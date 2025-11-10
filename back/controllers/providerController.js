@@ -361,25 +361,91 @@ const extractSingleProviderFromExcel = (filePath) => {
     return null;
   }
 
-  const sheet = workbook.Sheets[firstSheetName];
-  const rows = xlsx.utils.sheet_to_json(sheet, { defval: '' });
-  const validRows = rows.filter((row) => {
-    const name = (row[EXCEL_TEMPLATE_COLUMNS.name] || '').toString().trim();
-    if (!name) {
-      return false;
+  // 1) Tentative avec le modèle "simple" (une ligne, en-têtes EXCEL_TEMPLATE_COLUMNS)
+  {
+    const sheet = workbook.Sheets[firstSheetName];
+    const rows = xlsx.utils.sheet_to_json(sheet, { defval: '' });
+    const validRows = rows.filter((row) => {
+      const name = (row[EXCEL_TEMPLATE_COLUMNS.name] || '').toString().trim();
+      if (!name) {
+        return false;
+      }
+      return !name.startsWith('#');
+    });
+
+    if (validRows.length === 1) {
+      return buildProviderPayloadFromExcelRow(validRows[0]);
     }
-    return !name.startsWith('#');
-  });
-
-  if (!validRows.length) {
-    return null;
+    if (validRows.length > 1) {
+      throw new Error('Le fichier modèle (simple) doit contenir un seul transporteur par import.');
+    }
   }
 
-  if (validRows.length > 1) {
-    throw new Error('Le fichier modèle doit contenir un seul transporteur par import.');
+  // 2) Fallback: essayer le modèle "dataset" (type Liste Global transporteurs.xlsx)
+  try {
+    // Utilise le parseur dataset existant pour construire des objets fournisseurs
+    // et ne garde que le premier si présent.
+    const providersModule = require('../data/providers');
+    if (typeof providersModule.loadFromExcel === 'function') {
+      const list = providersModule.loadFromExcel(filePath) || [];
+      if (Array.isArray(list) && list.length === 1) {
+        return list[0];
+      }
+      if (Array.isArray(list) && list.length > 1) {
+        throw new Error(
+          'Le fichier dataset contient plusieurs lignes. Utilisez l\'import Excel (dataset) pour importer plusieurs fournisseurs en une fois.'
+        );
+      }
+    }
+  } catch (err) {
+    // ignore and fall through to null
   }
 
-  return buildProviderPayloadFromExcelRow(validRows[0]);
+  // Rien trouvé
+  return null;
+};
+
+// Retourne une liste de fournisseurs à partir d'un fichier Excel.
+// Accepte le modèle "simple" (en-têtes EXCEL_TEMPLATE_COLUMNS) avec 1..N lignes,
+// ou le modèle "dataset" (type Liste Global transporteurs.xlsx).
+const extractFlexibleProvidersFromExcel = (filePath) => {
+  const workbook = xlsx.readFile(filePath);
+  const [firstSheetName] = workbook.SheetNames;
+  if (!firstSheetName) {
+    return [];
+  }
+
+  const sheet = workbook.Sheets[firstSheetName];
+
+  // 1) Essayer le modèle simple (colonnes EXCEL_TEMPLATE_COLUMNS)
+  try {
+    const rows = xlsx.utils.sheet_to_json(sheet, { defval: '' });
+    const validRows = rows.filter((row) => {
+      const name = (row[EXCEL_TEMPLATE_COLUMNS.name] || '').toString().trim();
+      if (!name) return false;
+      return !name.startsWith('#');
+    });
+    if (validRows.length > 0) {
+      return validRows.map((row) => buildProviderPayloadFromExcelRow(row));
+    }
+  } catch (_) {
+    // fallthrough
+  }
+
+  // 2) Fallback: parseur dataset
+  try {
+    const providersModule = require('../data/providers');
+    if (typeof providersModule.loadFromExcel === 'function') {
+      const list = providersModule.loadFromExcel(filePath) || [];
+      if (Array.isArray(list)) {
+        return list;
+      }
+    }
+  } catch (_) {
+    // ignore
+  }
+
+  return [];
 };
 
 const buildProviderTemplateBuffer = () => {
@@ -1276,9 +1342,11 @@ const importSingleProviderWithTariff = async (req, res, next) => {
     return res.status(400).json({ error: 'Le fichier Excel du fournisseur est requis.' });
   }
 
-  let excelPayload;
+  let providerPayloads = [];
   try {
-    excelPayload = extractSingleProviderFromExcel(providerFile.path);
+    // Accepter 1..N fournisseurs depuis un seul fichier
+    const list = extractFlexibleProvidersFromExcel(providerFile.path);
+    providerPayloads = Array.isArray(list) ? list : [];
   } catch (error) {
     await cleanupUploadedFile(providerFile);
     await cleanupUploadedFile(tariffFile);
@@ -1287,14 +1355,49 @@ const importSingleProviderWithTariff = async (req, res, next) => {
     await cleanupUploadedFile(providerFile);
   }
 
-  if (!excelPayload) {
+  if (!providerPayloads || providerPayloads.length === 0) {
     await cleanupUploadedFile(tariffFile);
     return res.status(400).json({
       error: 'Aucune donnée transporteur trouvée dans le modèle. Remplissez au moins une ligne.',
     });
   }
+  // Si plusieurs fournisseurs dans le fichier et un document tarifaire est présent,
+  // refuser pour éviter l'ambiguïté.
+  if (providerPayloads.length > 1 && tariffFile) {
+    await cleanupUploadedFile(tariffFile);
+    return res.status(400).json({
+      error:
+        'Le fichier contient plusieurs transporteurs. Importez-les sans document via "Importer Excel", puis ajoutez un PDF par ligne depuis la liste.',
+    });
+  }
 
-  const { errors, value } = normalizeProviderPayload(excelPayload);
+  if (providerPayloads.length > 1) {
+    // Import de masse (sans document)
+    try {
+      const { importProviders } = require('../services/providerImportService');
+      // Valider et normaliser chaque entrée
+      const normalized = [];
+      for (const payload of providerPayloads) {
+        const { errors, value } = normalizeProviderPayload(payload);
+        if (errors.length === 0) {
+          normalized.push(value);
+        }
+      }
+      if (normalized.length === 0) {
+        return res.status(400).json({ error: 'Aucune ligne valide dans le fichier.' });
+      }
+      const result = await importProviders(normalized, { sourceSheet: 'CUSTOM' });
+      return res.status(201).json({
+        message: `${result.processed} fournisseur(s) importé(s).`,
+        processed: result.processed,
+      });
+    } catch (error) {
+      return next(error);
+    }
+  }
+
+  // Cas monoligne: procéder comme avant avec option de document PDF/Excel
+  const { errors, value } = normalizeProviderPayload(providerPayloads[0]);
   if (errors.length > 0) {
     await cleanupUploadedFile(tariffFile);
     return res.status(400).json({ error: errors.join(' ') });
@@ -1431,6 +1534,96 @@ const downloadProviderImportTemplate = (_req, res) => {
   return res.send(buffer);
 };
 
+// Modèle aligné sur "Liste Global transporteurs.xlsx"
+const buildProviderDatasetTemplateBuffer = () => {
+  const workbook = xlsx.utils.book_new();
+
+  // Lignes d'en-tête (2 lignes)
+  const headerTop = [];
+  const headerSecond = [];
+
+  const push = (top, second) => {
+    headerTop.push(top || '');
+    headerSecond.push(second || '');
+  };
+
+  // Colonnes fiche fournisseur
+  [
+    'Nom Transporteur',
+    'Adresse',
+    'Département',
+    'Ville',
+    'Nom de Contact',
+    'Téléphone',
+    'Ne Répond pas ',
+  ].forEach((label) => push('', label));
+
+  // Départements livraisons (exemple de quelques codes)
+  ['01', '69', '75'].forEach((dept) => push('Département de livraisons', dept));
+  // Départements chargement (exemple)
+  ['42', '69'].forEach((dept) => push('Département de Chargement', dept));
+
+  // Groupes d'équipements / services (suivent featureDictionary)
+  ['Semi- Type', 'Taut '];
+  [
+    ['Semi- Type', ['Taut ', 'Fourgon', 'Frigo', 'Semi-Hayon']],
+    ['Porteurs-Type', ['Porteur tolé', 'Porteur Taut', 'Hayon']],
+    ['VL ', ['VL ']],
+    ['Express', ['EXPRESS']],
+    ['Moyens de manutention', ['GRUE', 'Chariot Embarqué', 'FOSSES', 'Porte-chars', 'convois exceptionnels']],
+    ['ADR', ['ADR']],
+    ['international', ['INTERNATIONAL']],
+  ].forEach(([top, seconds]) => {
+    seconds.forEach((sec) => push(top, sec));
+  });
+
+  const rows = [];
+  rows.push(headerTop);
+  rows.push(headerSecond);
+
+  // Exemple de ligne de données (cocher avec 'x')
+  const data = new Array(headerSecond.length).fill('');
+  const setBySecond = (label, value) => {
+    const idx = headerSecond.findIndex((l) => l === label);
+    if (idx >= 0) data[idx] = value;
+  };
+  setBySecond('Nom Transporteur', 'EXEMPLE TRANSPORTEUR');
+  setBySecond('Adresse', '12 rue des Forges');
+  setBySecond('Département', '69');
+  setBySecond('Ville', '69000 Lyon');
+  setBySecond('Nom de Contact', 'Jean Dupont');
+  setBySecond('Téléphone', '0601020304');
+  setBySecond('Ne Répond pas ', '');
+
+  // Exemples de départements livraisons/chargement cochés
+  setBySecond('01', 'x');
+  setBySecond('69', 'x');
+  setBySecond('75', '');
+  setBySecond('42', 'x');
+
+  // Exemples d’équipements
+  ['Taut ', 'Hayon', 'EXPRESS', 'GRUE'].forEach((sec) => setBySecond(sec, 'x'));
+
+  rows.push(data);
+
+  const sheet = xlsx.utils.aoa_to_sheet(rows);
+  xlsx.utils.book_append_sheet(workbook, sheet, 'Fournisseurs');
+  return xlsx.write(workbook, { bookType: 'xlsx', type: 'buffer' });
+};
+
+const downloadProviderDatasetTemplate = (_req, res) => {
+  const buffer = buildProviderDatasetTemplateBuffer();
+  res.setHeader(
+    'Content-Type',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  );
+  res.setHeader(
+    'Content-Disposition',
+    'attachment; filename="modele_import_fournisseurs_dataset.xlsx"'
+  );
+  return res.send(buffer);
+};
+
 // Génère un modèle Excel simple pour une grille tarifaire à remplir
 const buildTariffGridTemplateBuffer = () => {
   const workbook = xlsx.utils.book_new();
@@ -1562,6 +1755,7 @@ module.exports = {
   importSingleProviderWithTariff,
   uploadProviderTariffDocument,
   downloadProviderImportTemplate,
+  downloadProviderDatasetTemplate,
   downloadTariffGridTemplate,
   importTariffCatalogFromExcel,
   getProviderTariffDocument,

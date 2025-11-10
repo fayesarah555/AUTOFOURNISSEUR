@@ -124,12 +124,16 @@ const AdminProviders = ({ onLogout }) => {
     return codes.map((code) => ({ value: code, label: code }));
   }, [meta]);
 
-  const templateDownloadUrl = useMemo(() => {
+  // Liens modèles Excel
+  const singleProviderTemplateUrl = useMemo(() => {
     const baseUrl = apiClient.defaults?.baseURL || '';
-    if (!baseUrl) {
-      return '/admin/providers/import/template';
-    }
-    return `${baseUrl.replace(/\/$/, '')}/admin/providers/import/template`;
+    const path = '/admin/providers/import/template';
+    return baseUrl ? `${baseUrl.replace(/\/$/, '')}${path}` : path;
+  }, []);
+  const datasetTemplateUrl = useMemo(() => {
+    const baseUrl = apiClient.defaults?.baseURL || '';
+    const path = '/admin/providers/import/dataset-template';
+    return baseUrl ? `${baseUrl.replace(/\/$/, '')}${path}` : path;
   }, []);
 
   const openTariffImportModal = () => {
@@ -599,6 +603,9 @@ const AdminProviders = ({ onLogout }) => {
               {importLoading ? 'Import en cours…' : 'Importer Excel'}
             </button>
           </form>
+          <a className="template-link" href={datasetTemplateUrl} target="_blank" rel="noreferrer">
+            Télécharger le modèle dataset
+          </a>
         </div>
       </header>
 
@@ -628,7 +635,7 @@ const AdminProviders = ({ onLogout }) => {
           </p>
           <a
             className="template-link"
-            href={templateDownloadUrl}
+            href={singleProviderTemplateUrl}
             target="_blank"
             rel="noreferrer"
           >

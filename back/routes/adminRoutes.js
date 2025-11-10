@@ -9,6 +9,7 @@ const {
   importSingleProviderWithTariff,
   uploadProviderTariffDocument,
   downloadProviderImportTemplate,
+  downloadProviderDatasetTemplate,
   downloadTariffGridTemplate,
   importTariffCatalogFromExcel,
 } = require('../controllers/providerController');
@@ -62,6 +63,12 @@ router.get(
   '/providers/import/template',
   requireAdmin,
   downloadProviderImportTemplate
+);
+
+router.get(
+  '/providers/import/dataset-template',
+  requireAdmin,
+  downloadProviderDatasetTemplate
 );
 
 router.get(
