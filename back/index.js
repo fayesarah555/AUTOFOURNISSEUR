@@ -41,6 +41,18 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Lightweight request logger (no external deps)
+app.use((req, res, next) => {
+  const start = Date.now();
+  const { method, url } = req;
+  res.on('finish', () => {
+    const ms = Date.now() - start;
+    // Avoid logging sensitive bodies; show params and status only
+    console.info(`[http] ${method} ${url} -> ${res.statusCode} (${ms}ms)`);
+  });
+  next();
+});
+
 app.use(
   session({
     name: SESSION_NAME,

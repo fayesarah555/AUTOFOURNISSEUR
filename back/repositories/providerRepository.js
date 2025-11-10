@@ -286,12 +286,27 @@ const findProviderById = async (externalRef) => {
   return clone(providers[0] || null);
 };
 
-const getTariffDocumentDefinition = async (externalRef) => {
-  if (!externalRef) {
+const getTariffDocumentDefinition = async (externalRefOrId) => {
+  if (!externalRefOrId) {
     return null;
   }
 
-  const rows = await fetchSuppliers(externalRef);
+  // Try lookup by external_ref (primary path), then fallback to numeric id
+  let rows = await fetchSuppliers(externalRefOrId);
+  if (!rows.length) {
+    // Fallback: numeric id support
+    const numericId = Number(externalRefOrId);
+    if (Number.isFinite(numericId)) {
+      rows = await pool.query('SELECT * FROM suppliers WHERE id = ?', [numericId]);
+      if (!rows.length) {
+        // trace why not found
+        console.warn('[providers][repo] supplier not found for id/external_ref', {
+          input: externalRefOrId,
+          numericId,
+        });
+      }
+    }
+  }
   if (!rows.length) {
     return null;
   }
@@ -299,7 +314,7 @@ const getTariffDocumentDefinition = async (externalRef) => {
   const row = rows[0];
   return {
     supplierId: row.id,
-    externalRef: row.external_ref || externalRef,
+    externalRef: row.external_ref || String(externalRefOrId),
     explicitPath: row.tariff_document_url || '',
   };
 };
@@ -422,9 +437,34 @@ const updateProvider = async (externalRef, updates) => {
   return findProviderById(externalRef);
 };
 
-const deleteProvider = async (externalRef) => {
-  const result = await pool.query('DELETE FROM suppliers WHERE external_ref = ?', [externalRef]);
-  return result.affectedRows > 0;
+const deleteProvider = async (externalRefOrId) => {
+  if (!externalRefOrId) {
+    return false;
+  }
+
+  const candidate = String(externalRefOrId).trim();
+  // Try delete by external_ref (primary key used across the app)
+  let result = await pool.query('DELETE FROM suppliers WHERE external_ref = ?', [candidate]);
+  if (result.affectedRows > 0) {
+    // eslint-disable-next-line no-console
+    console.info('[providers][delete] deleted by external_ref', { externalRef: candidate });
+    return true;
+  }
+
+  // Fallback: if a numeric id was provided, allow deletion by numeric id
+  const numericId = Number(candidate);
+  if (Number.isFinite(numericId)) {
+    result = await pool.query('DELETE FROM suppliers WHERE id = ?', [numericId]);
+    if (result.affectedRows > 0) {
+      // eslint-disable-next-line no-console
+      console.info('[providers][delete] deleted by numeric id', { id: numericId });
+      return true;
+    }
+  }
+
+  // eslint-disable-next-line no-console
+  console.warn('[providers][delete] supplier not found for deletion', { input: externalRefOrId });
+  return false;
 };
 
 const updateProviderTariffDocumentPath = async (externalRef, filename) => {

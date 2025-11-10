@@ -16,6 +16,7 @@ const importExcelProviders = async (req, res, next) => {
     console.info(`Admin import: ${result.processed} fournisseurs traités depuis ${file.originalname}`);
     return res.status(200).json({
       processed: result.processed,
+      items: result.items || [],
       message: `${result.processed} fournisseur(s) importé(s) avec succès`,
     });
   } catch (error) {

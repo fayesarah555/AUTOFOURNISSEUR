@@ -332,6 +332,7 @@ const importProviders = async (providers, { sourceSheet = 'CUSTOM' } = {}) => {
     await seedReferenceData(conn);
 
     let processed = 0;
+    const items = [];
 
     for (const provider of providers) {
       await conn.beginTransaction();
@@ -343,13 +344,20 @@ const importProviders = async (providers, { sourceSheet = 'CUSTOM' } = {}) => {
         await updateCoverage(conn, supplierId, provider);
         await conn.commit();
         processed += 1;
+        items.push({
+          supplierId: Number(supplierId),
+          externalRef: provider.id,
+          name: provider.name || null,
+        });
+        // eslint-disable-next-line no-console
+        console.info('[providers][import] upserted', { supplierId, externalRef: provider.id, name: provider.name });
       } catch (error) {
         await conn.rollback();
         throw error;
       }
     }
 
-    return { processed };
+    return { processed, items };
   } finally {
     conn.release();
   }

@@ -141,7 +141,13 @@ const AdminProviders = ({ onLogout }) => {
     setTariffImportModalOpen(true);
   };
   const closeTariffImportModal = () => setTariffImportModalOpen(false);
-  const openTariffImportFor = (providerId) => {
+  const openTariffImportFor = async (providerId) => {
+    try {
+      await apiClient.get('/admin/providers/' + encodeURIComponent(providerId));
+    } catch (err) {
+      alert('Transporteur introuvable. Rafraîchissez la liste ou réimportez-le.');
+      return;
+    }
     setTariffImportState({ providerId, file: null, loading: false, status: null, error: null });
     setTariffImportModalOpen(true);
   };
@@ -413,7 +419,10 @@ const AdminProviders = ({ onLogout }) => {
         },
       });
       const data = response.data || {};
-      setImportStatus(data.message || (data.processed ? data.processed + ' fournisseurs importés.' : 'Import terminé.'));
+      const details = Array.isArray(data.items) && data.items.length
+        ? `\nIDs: ${data.items.map((it) => it.externalRef).join(', ')}`
+        : '';
+      setImportStatus((data.message || (data.processed ? data.processed + ' fournisseurs importés.' : 'Import terminé.')) + details);
       setSelectedFile(null);
       fetchProviders();
     } catch (err) {
@@ -431,7 +440,13 @@ const AdminProviders = ({ onLogout }) => {
     }
   };
 
-  const handleTariffUploadClick = (providerId) => {
+  const handleTariffUploadClick = async (providerId) => {
+    try {
+      await apiClient.get('/admin/providers/' + encodeURIComponent(providerId));
+    } catch (err) {
+      alert('Transporteur introuvable. Rafraîchissez la liste ou réimportez-le.');
+      return;
+    }
     const input = tariffFileInputs.current[providerId];
     if (input) {
       input.click();

@@ -1457,11 +1457,13 @@ const uploadProviderTariffDocument = async (req, res, next) => {
   try {
     const { id } = req.params;
     if (!id) {
+      console.warn('[providers][uploadTariff] missing id');
       await cleanupUploadedFile(tempFile);
       return res.status(400).json({ error: 'Identifiant fournisseur requis.' });
     }
 
     if (!tempFile) {
+      console.warn('[providers][uploadTariff] no file received', { providerId: id });
       return res.status(400).json({ error: 'Aucun fichier reçu.' });
     }
 
@@ -1475,6 +1477,7 @@ const uploadProviderTariffDocument = async (req, res, next) => {
 
     const meta = await getTariffDocumentDefinition(id);
     if (!meta) {
+      console.warn('[providers][uploadTariff] supplier not found', { providerId: id });
       await cleanupUploadedFile(tempFile);
       return res.status(404).json({ error: 'Transporteur introuvable.' });
     }
@@ -1511,11 +1514,13 @@ const uploadProviderTariffDocument = async (req, res, next) => {
         .json({ error: 'Impossible de mettre à jour le transporteur.' });
     }
 
+    console.info('[providers][uploadTariff] imported document', { providerId: id, filename: tempFile?.originalname || null });
     return res.json({
       message: 'Document tarifaire importé avec succès.',
       data: enrichProvider(updatedProvider),
     });
   } catch (error) {
+    console.error('[providers][uploadTariff] error', { message: error.message });
     await cleanupUploadedFile(tempFile);
     return next(error);
   }
