@@ -17,6 +17,7 @@ const createEmptyFilters = () => ({
   palletFormat: '',
   palletFormatOption: '',
   palletBaseMeter: '',
+  palletBaseWeight: '',
   palletMeters: '',
   supplementaryOptions: [],
   weightKg: '',
@@ -24,6 +25,7 @@ const createEmptyFilters = () => ({
   requireWeightMatch: false,
   deliveryDepartments: [],
   pickupDepartments: [],
+  cargoSelections: [],
 });
 
 const PALLET_DIMENSION_ORDER = ['80x120', '100x100', '100x120', '120x120', '100x160', '60x80'];
@@ -405,6 +407,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
   const [providers, setProviders] = useState([]);
   const [appliedFilters, setAppliedFilters] = useState(createEmptyFilters());
   const [formState, setFormState] = useState(createEmptyFilters());
+  const [cargoSelections, setCargoSelections] = useState([]);
   const [filtersExpanded, setFiltersExpanded] = useState(true);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -496,6 +499,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
     palletFormatGroups,
     palletOptionMap,
     palletBaseMeterMap,
+    palletBaseWeightMap,
   } = useMemo(() => {
     const rawEntries = Array.isArray(meta?.availableFilters?.palletMeters)
       ? meta.availableFilters.palletMeters
@@ -554,18 +558,26 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
       return a.label.localeCompare(b.label, 'fr-FR');
     });
 
-    const baseMap = new Map();
+    const baseMeterMap = new Map();
+    const baseWeightMap = new Map();
     groups.forEach((group) => {
       const baseOption = group.options.find((option) => option.palletCount === 1) || group.options[0];
       if (baseOption && baseOption.palletCount > 0) {
-        baseMap.set(group.label, baseOption.meter / baseOption.palletCount);
+        baseMeterMap.set(group.label, baseOption.meter / baseOption.palletCount);
+        if (Number.isFinite(baseOption.tonnage)) {
+          const perPalletKg = (baseOption.tonnage * 1000) / baseOption.palletCount;
+          if (Number.isFinite(perPalletKg) && perPalletKg > 0) {
+            baseWeightMap.set(group.label, perPalletKg);
+          }
+        }
       }
     });
 
     return {
       palletFormatGroups: groups,
       palletOptionMap: optionMap,
-      palletBaseMeterMap: baseMap,
+      palletBaseMeterMap: baseMeterMap,
+      palletBaseWeightMap: baseWeightMap,
     };
   }, [meta]);
 
@@ -574,12 +586,22 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
     [palletFormatGroups]
   );
 
-  const getPalletOptionDisplay = useCallback((option) => {
-    const tonnageLabel = Number.isFinite(option.tonnage) ? `${option.tonnage.toFixed(1)} t` : '-- t';
-    return `${option.dimensionLabel} • ${option.meter.toFixed(3)} m • ${tonnageLabel} • ${
-      option.palletCount
-    } palette${option.palletCount > 1 ? 's' : ''}`;
-  }, []);
+  const uniquePalletFormatOptions = useMemo(() => {
+    const seen = new Set();
+    return flattenedPalletOptions.filter((option) => {
+      const key = (option.dimensionLabel || '').toLowerCase();
+      if (!key || seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+  }, [flattenedPalletOptions]);
+
+  const getPalletOptionDisplay = useCallback(
+    (option) => option?.dimensionLabel || '',
+    []
+  );
 
   useEffect(() => {
     if (!formState.palletFormatOption) {
@@ -599,6 +621,15 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
     return (baseMeter * count).toFixed(3);
   }, []);
 
+  const computeWeightFromBase = useCallback((baseWeightValue, countValue) => {
+    const baseWeight = Number(baseWeightValue);
+    const count = Number(countValue);
+    if (!Number.isFinite(baseWeight) || !Number.isFinite(count) || count <= 0) {
+      return '';
+    }
+    return String(Math.round(baseWeight * count));
+  }, []);
+
   const handlePalletFormatSelection = useCallback(
     (value) => {
       if (!value) {
@@ -607,6 +638,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
           palletFormatOption: '',
           palletFormat: '',
           palletBaseMeter: '',
+          palletBaseWeight: '',
           palletCount: '',
           palletMeters: '',
           weightKg: '',
@@ -620,12 +652,19 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
         return;
       }
       const baseUnit = entry.palletCount > 0 ? entry.meter / entry.palletCount : null;
-      const weightKg = Number.isFinite(entry.tonnage) ? String(Math.round(entry.tonnage * 1000)) : '';
+      const baseWeightPerPallet =
+        entry.palletCount > 0 && Number.isFinite(entry.tonnage)
+          ? (entry.tonnage * 1000) / entry.palletCount
+          : null;
+      const weightKg = baseWeightPerPallet
+        ? String(Math.round(baseWeightPerPallet * entry.palletCount))
+        : '';
       setFormState((prev) => ({
         ...prev,
         palletFormatOption: value,
         palletFormat: entry.dimensionLabel,
         palletBaseMeter: baseUnit ? baseUnit.toFixed(4) : '',
+        palletBaseWeight: baseWeightPerPallet ? baseWeightPerPallet.toFixed(3) : '',
         palletCount: String(entry.palletCount),
         palletMeters: entry.meter.toFixed(3),
         weightKg,
@@ -645,11 +684,14 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
           prev.palletBaseMeter || palletBaseMeterMap.get(prev.palletFormat),
           value
         ),
-        weightKg: '',
+        weightKg: computeWeightFromBase(
+          prev.palletBaseWeight || palletBaseWeightMap.get(prev.palletFormat),
+          value
+        ),
       }));
       setPalletFormatInput('');
     },
-    [computeMetersFromBase, palletBaseMeterMap]
+    [computeMetersFromBase, computeWeightFromBase, palletBaseMeterMap, palletBaseWeightMap]
   );
 
   const handlePalletFormatInputChange = useCallback(
@@ -661,14 +703,56 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
       }
       const normalized = value.trim().toLowerCase();
       const matched = flattenedPalletOptions.find(
-        (option) => getPalletOptionDisplay(option).toLowerCase() === normalized
+        (option) => (option.dimensionLabel || '').toLowerCase() === normalized
       );
       if (matched) {
         handlePalletFormatSelection(matched.id);
       }
     },
-    [flattenedPalletOptions, getPalletOptionDisplay, handlePalletFormatSelection]
+    [flattenedPalletOptions, handlePalletFormatSelection]
   );
+
+  const handleAddCargoSelection = useCallback(() => {
+    const formatLabel = formState.palletFormat?.trim();
+    const countValue = Number(formState.palletCount);
+    if (!formatLabel) {
+      window.alert('Choisissez un format avant de l\'ajouter au panier.');
+      return;
+    }
+    if (!Number.isFinite(countValue) || countValue <= 0) {
+      window.alert('Indiquez un nombre de palettes valide.');
+      return;
+    }
+    const metersValue = Number(formState.palletMeters);
+    const weightValue = Number(formState.weightKg);
+    const newEntry = {
+      id: `${formState.palletFormatOption || formatLabel}-${Date.now()}`,
+      format: formatLabel,
+      count: countValue,
+      meters: Number.isFinite(metersValue) ? metersValue : 0,
+      weightKg: Number.isFinite(weightValue) ? weightValue : 0,
+    };
+    setCargoSelections((prev) => [...prev, newEntry]);
+    setFormState((prev) => ({
+      ...prev,
+      palletFormatOption: '',
+      palletFormat: '',
+      palletBaseMeter: '',
+      palletBaseWeight: '',
+      palletCount: '',
+      palletMeters: '',
+      weightKg: '',
+    }));
+    setPalletFormatInput('');
+  }, [formState, setCargoSelections]);
+
+  const handleRemoveCargoSelection = useCallback((selectionId) => {
+    setCargoSelections((prev) => prev.filter((entry) => entry.id !== selectionId));
+  }, []);
+
+  const handleClearCargoSelections = useCallback(() => {
+    setCargoSelections([]);
+  }, []);
 
   const formattedPalletMetersLabel = useMemo(() => {
     const meters = Number(formState.palletMeters);
@@ -680,6 +764,34 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
       maximumFractionDigits: 3,
     });
   }, [formState.palletMeters]);
+
+  const cargoStepState = useMemo(() => {
+    const hasFormat = Boolean(formState.palletFormat?.trim());
+    const palletCountNumber = Number(formState.palletCount);
+    const hasPalletCount = hasFormat && Number.isFinite(palletCountNumber) && palletCountNumber > 0;
+    return {
+      hasFormat,
+      hasPalletCount,
+    };
+  }, [formState.palletFormat, formState.palletCount]);
+
+  const cargoTotals = useMemo(() => {
+    if (cargoSelections.length === 0) {
+      return {
+        palletCount: Number(formState.palletCount) || 0,
+        palletMeters: Number(formState.palletMeters) || 0,
+        weightKg: Number(formState.weightKg) || 0,
+      };
+    }
+    return cargoSelections.reduce(
+      (acc, entry) => ({
+        palletCount: acc.palletCount + (entry.count || 0),
+        palletMeters: acc.palletMeters + (entry.meters || 0),
+        weightKg: acc.weightKg + (entry.weightKg || 0),
+      }),
+      { palletCount: 0, palletMeters: 0, weightKg: 0 }
+    );
+  }, [cargoSelections, formState.palletCount, formState.palletMeters, formState.weightKg]);
 
   const appliedDistanceKm = useMemo(() => {
     const fromMeta = meta?.estimatedDistanceKm;
@@ -753,14 +865,31 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
   }, [tariffModal.open, tariffModal.error, tariffModal.url, tariffModal.type]);
 
   const handleApplyFilters = useCallback(() => {
-    setAppliedFilters({ ...formState });
+    const totals = cargoSelections.length
+      ? {
+          palletCount: cargoTotals.palletCount ? String(cargoTotals.palletCount) : '',
+          palletMeters: cargoTotals.palletMeters ? cargoTotals.palletMeters.toFixed(3) : '',
+          weightKg: cargoTotals.weightKg ? String(Math.round(cargoTotals.weightKg)) : '',
+        }
+      : {
+          palletCount: formState.palletCount,
+          palletMeters: formState.palletMeters,
+          weightKg: formState.weightKg,
+        };
+
+    setAppliedFilters({
+      ...formState,
+      cargoSelections,
+      ...totals,
+    });
     setPage(1);
-  }, [formState]);
+  }, [formState, cargoSelections, cargoTotals]);
 
   const handleResetFilters = useCallback(() => {
     const empty = createEmptyFilters();
     setFormState(empty);
     setAppliedFilters(empty);
+    setCargoSelections([]);
     setPage(1);
     setEstimationDeparture('');
     setEstimationArrival('');
@@ -1286,30 +1415,42 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
               <div className="filters-subsection filters-subsection--cargo">
                 <h3>Description marchandise</h3>
                 <div className="filters-grid">
-                  <div className="filter-group">
+                  <div className="filter-group cargo-step">
                     <label>
-                      <span>Format / équivalences</span>
+                      <span className="cargo-step-heading">
+                        <span className="cargo-step-badge">Etape 1</span>
+                        Format
+                      </span>
                       <input
                         className="autocomplete-input"
                         type="text"
                         list="pallet-format-datalist"
-                        placeholder="80x120 • 0.8 m • 0.9 t • 1 palette"
+                        placeholder="80x120"
                         value={palletFormatInput}
                         onChange={(e) => handlePalletFormatInputChange(e.target.value)}
                       />
                       <datalist id="pallet-format-datalist">
-                        {flattenedPalletOptions.map((option) => (
+                        {uniquePalletFormatOptions.map((option) => (
                           <option key={option.id} value={getPalletOptionDisplay(option)} />
                         ))}
                       </datalist>
                     </label>
-                    {formState.palletFormat && (
-                      <small className="helper-text">Format sélectionné : {formState.palletFormat}</small>
-                    )}
+                    <small className="helper-text">
+                      {formState.palletFormat
+                        ? `Format selectionne : ${formState.palletFormat}`
+                        : 'Commencez par choisir un format.'}
+                    </small>
                   </div>
-                  <div className="filter-group">
+                  <div
+                    className={`filter-group cargo-step ${
+                      cargoStepState.hasFormat ? '' : 'filter-group--locked'
+                    }`}
+                  >
                     <label>
-                      <span>Nombre de palettes</span>
+                      <span className="cargo-step-heading">
+                        <span className="cargo-step-badge">Etape 2</span>
+                        Nombre de palettes
+                      </span>
                       <input
                         type="number"
                         min="1"
@@ -1317,13 +1458,23 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                         step="1"
                         value={formState.palletCount}
                         onChange={(e) => handlePalletCountChange(e.target.value)}
-                        disabled={!formState.palletFormat}
+                        disabled={!cargoStepState.hasFormat}
                       />
                     </label>
+                    {!cargoStepState.hasFormat && (
+                      <small className="helper-text">Choisissez un format pour debloquer cette etape.</small>
+                    )}
                   </div>
-                  <div className="filter-group">
+                  <div
+                    className={`filter-group cargo-step ${
+                      cargoStepState.hasPalletCount ? '' : 'filter-group--locked'
+                    }`}
+                  >
                     <label>
-                      <span>Mètres calculés</span>
+                      <span className="cargo-step-heading">
+                        <span className="cargo-step-badge">Etape 3</span>
+                        Metres calcules
+                      </span>
                       <input
                         type="text"
                         value={formattedPalletMetersLabel ? `${formattedPalletMetersLabel} m` : ''}
@@ -1332,21 +1483,110 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                       />
                     </label>
                     <small className="helper-text">
-                      Calcul automatique (format × nombre)
+                      {cargoStepState.hasPalletCount
+                        ? 'Calcul automatique (format x nombre)'
+                        : 'Les metres apparaissent apres les etapes 1 et 2.'}
                     </small>
                   </div>
-                  <div className="filter-group">
+                  <div
+                    className={`filter-group cargo-step ${
+                      cargoStepState.hasPalletCount ? '' : 'filter-group--locked'
+                    }`}
+                  >
                     <label>
-                      <span>Poids (kg)</span>
+                      <span className="cargo-step-heading">
+                        <span className="cargo-step-badge">Etape 4</span>
+                        Poids (kg)
+                      </span>
                       <input
                         type="number"
                         min="0"
                         value={formState.weightKg}
                         onChange={(e) => updateFormState('weightKg', e.target.value)}
+                        disabled={!cargoStepState.hasPalletCount}
                       />
                     </label>
+                    {!cargoStepState.hasPalletCount && (
+                      <small className="helper-text">
+                        Ajoutez un nombre de palettes avant d'indiquer le poids.
+                      </small>
+                    )}
+                    {cargoStepState.hasPalletCount && (
+                      <small className="helper-text">Calcul automatique (modifiable si besoin)</small>
+                    )}
                   </div>
                 </div>
+                <div className="cargo-step-actions">
+                  <button
+                    type="button"
+                    onClick={handleAddCargoSelection}
+                    disabled={!cargoStepState.hasPalletCount}
+                  >
+                    Ajouter au panier
+                  </button>
+                  {cargoSelections.length > 0 && (
+                    <button
+                      type="button"
+                      className="link-button"
+                      onClick={handleClearCargoSelections}
+                    >
+                      Vider le panier
+                    </button>
+                  )}
+                </div>
+                {cargoSelections.length > 0 && (
+                  <div className="cargo-basket">
+                    <div className="cargo-basket-header">
+                      <div>
+                        <strong>{cargoSelections.length}</strong> format
+                        {cargoSelections.length > 1 ? 's' : ''} enregistres
+                      </div>
+                      <div className="cargo-basket-summary">
+                        {cargoTotals.palletCount > 0 && (
+                          <span>
+                            <strong>{cargoTotals.palletCount}</strong> palette
+                            {cargoTotals.palletCount > 1 ? 's' : ''}
+                          </span>
+                        )}
+                        {cargoTotals.palletMeters > 0 && (
+                          <span>
+                            <strong>{cargoTotals.palletMeters.toFixed(3)}</strong> m
+                          </span>
+                        )}
+                        {cargoTotals.weightKg > 0 && (
+                          <span>
+                            <strong>{Math.round(cargoTotals.weightKg)}</strong> kg
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <ul className="cargo-basket-list">
+                      {cargoSelections.map((entry) => (
+                        <li key={entry.id} className="cargo-basket-item">
+                          <div className="cargo-basket-info">
+                            <strong>{entry.format}</strong>
+                            <span>
+                              {entry.count} palette{entry.count > 1 ? 's' : ''}
+                            </span>
+                          </div>
+                          <div className="cargo-basket-metrics">
+                            <span>
+                              {entry.meters > 0 ? `${entry.meters.toFixed(3)} m` : '--'}
+                            </span>
+                            <span>{entry.weightKg > 0 ? `${Math.round(entry.weightKg)} kg` : '--'}</span>
+                          </div>
+                          <button
+                            type="button"
+                            className="cargo-basket-remove"
+                            onClick={() => handleRemoveCargoSelection(entry.id)}
+                          >
+                            Retirer
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             </div>
             <div className="filters-actions">
