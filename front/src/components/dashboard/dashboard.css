@@ -988,6 +988,25 @@ body {
   color: #fff;
 }
 
+.provider-rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--color-text);
+}
+
+.provider-rating-stars {
+  color: var(--color-warning);
+  letter-spacing: 1px;
+  font-weight: 600;
+}
+
+.provider-rating-value {
+  font-weight: 600;
+  color: var(--color-muted);
+}
+
 .btn-tariff {
   padding: 6px 14px;
   border-radius: 6px;

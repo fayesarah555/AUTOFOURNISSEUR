@@ -766,26 +766,6 @@ const applyFilters = (items, filters) =>
       }
     }
 
-    const requiresIdfTariff =
-      (filters.departureDepartment && IDF_DEPARTMENT_CODES.has(filters.departureDepartment)) ||
-      (filters.arrivalDepartment && IDF_DEPARTMENT_CODES.has(filters.arrivalDepartment));
-
-    if (requiresIdfTariff) {
-      const pricingSource = (item.pricing?.source || '').toLowerCase();
-      if (pricingSource !== 'idf') {
-        logIdfDecision('rejected-non-idf-pricing', { pricingSource });
-        return false;
-      }
-    }
-
-    if (filters.arrivalDepartment && IDF_DEPARTMENT_CODES.has(filters.arrivalDepartment)) {
-      const providerDepartment = normalizeDepartmentFilter(item.profile?.department);
-      if (!providerDepartment || !IDF_DEPARTMENT_CODES.has(providerDepartment)) {
-        logIdfDecision('rejected-provider-not-idf', { providerDepartment });
-        return false;
-      }
-    }
-
     if (typeof filters.palletMeters === 'number') {
       const providerMeters = sanitizeNumber(item.pricing?.palletMpl);
       if (typeof providerMeters !== 'number' || providerMeters < filters.palletMeters) {
@@ -1225,6 +1205,7 @@ const normalizeProviderPayload = (input, { partial = false } = {}) => {
   assignNumber('minShipmentKg', { min: 0 });
   assignNumber('co2GramsPerTonneKm', { min: 0 });
   assignNumber('customerSatisfaction', { min: 0, max: 5 });
+  assignNumber('rating', { min: 1, max: 5 });
 
   const profileInput = data.profile || {};
   if (data.profile !== undefined || !partial) {

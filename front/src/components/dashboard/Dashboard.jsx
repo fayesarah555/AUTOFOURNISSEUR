@@ -1250,9 +1250,6 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
       addListParam('features', appliedFilters.features);
       addListParam('supplementaryOptions', appliedFilters.supplementaryOptions);
 
-      addNumberParam('palletCount', appliedFilters.palletCount);
-      addNumberParam('palletMeters', appliedFilters.palletMeters);
-      addNumberParam('weightKg', appliedFilters.weightKg);
       addNumberParam('distanceKm', appliedFilters.distanceKm);
 
       if (appliedFilters.requireWeightMatch) {
@@ -1656,6 +1653,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                       <th>Transporteur</th>
                       <th>Département</th>
                       <th>Contact</th>
+                      <th>Note</th>
                       <th>Téléphone</th>
                       <th>Distance estimée</th>
                       <th>Grille tarif transporteur</th>
@@ -1674,6 +1672,8 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                       const departmentDisplay = departmentRaw ? departmentRaw.toString().toUpperCase() : '--';
 
                       const contactDisplay = provider.profile?.contact?.trim() || '--';
+                      const ratingValue = Number(provider.rating);
+                      const hasRating = Number.isFinite(ratingValue) && ratingValue > 0;
                       const phoneDisplay = provider.profile?.phone?.trim() || '--';
 
                       return (
@@ -1693,6 +1693,19 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                           </td>
                           <td>{departmentDisplay}</td>
                           <td>{contactDisplay}</td>
+                          <td>
+                            {hasRating ? (
+                              <div className="provider-rating">
+                                <span className="provider-rating-stars">
+                                  {'★'.repeat(ratingValue)}
+                                  {'☆'.repeat(5 - ratingValue)}
+                                </span>
+                                <span className="provider-rating-value">{ratingValue}/5</span>
+                              </div>
+                            ) : (
+                              '--'
+                            )}
+                          </td>
                           <td>{phoneDisplay}</td>
                           <td>{formattedDistanceLabel || '--'}</td>
                           <td>

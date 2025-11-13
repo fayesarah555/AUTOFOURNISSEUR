@@ -28,7 +28,7 @@ const sql = {
       tariff_document_url,
       status, coverage, contract_flexibility, lead_time_days, on_time_rate,
       price_per_km, base_handling_fee, min_shipment_kg, co2_grams_per_tonne_km,
-      customer_satisfaction, modes_json, regions_json, certifications_json,
+      customer_satisfaction, rating, modes_json, regions_json, certifications_json,
       unreachable, profile_notes, notes
     ) VALUES (
       ?, ?, ?, ?, NULL, NULL,
@@ -36,7 +36,7 @@ const sql = {
       ?,
       'active', ?, ?, ?, ?,
       ?, ?, ?, ?,
-      ?, ?, ?, ?,
+      ?, ?, ?, ?, ?,
       ?, ?, ?
     )`,
   updateSupplier:
@@ -59,6 +59,7 @@ const sql = {
       min_shipment_kg = ?,
       co2_grams_per_tonne_km = ?,
       customer_satisfaction = ?,
+      rating = ?,
       modes_json = ?,
       regions_json = ?,
       certifications_json = ?,
@@ -155,6 +156,16 @@ const seedReferenceData = async (conn) => {
 const importProvider = async (conn, provider, { sourceSheet = 'CUSTOM' } = {}) => {
   const deliveryDepartments = provider.profile?.deliveryDepartments || [];
   const pickupDepartments = provider.profile?.pickupDepartments || [];
+  const ratingValue = (() => {
+    if (provider.rating === undefined || provider.rating === null) {
+      return null;
+    }
+    const parsed = Number(provider.rating);
+    if (!Number.isFinite(parsed)) {
+      return null;
+    }
+    return Math.max(1, Math.min(5, Math.round(parsed)));
+  })();
 
   const countryCode =
     provider.source_sheet === 'TPS_Espagnols' ? 'ES' : provider.countryCode || 'FR';
@@ -211,6 +222,7 @@ const importProvider = async (conn, provider, { sourceSheet = 'CUSTOM' } = {}) =
       provider.minShipmentKg || 0,
       provider.co2GramsPerTonneKm || 180,
       provider.customerSatisfaction || 4,
+      ratingValue,
       modesJson,
       regionsJson,
       certificationsJson,
@@ -242,6 +254,7 @@ const importProvider = async (conn, provider, { sourceSheet = 'CUSTOM' } = {}) =
     provider.minShipmentKg || 0,
     provider.co2GramsPerTonneKm || 180,
     provider.customerSatisfaction || 4,
+    ratingValue,
     modesJson,
     regionsJson,
     certificationsJson,

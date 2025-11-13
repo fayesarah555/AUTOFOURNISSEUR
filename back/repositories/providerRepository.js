@@ -233,6 +233,7 @@ const hydrateProviders = async (supplierRows) => {
       minShipmentKg: toNumber(row.min_shipment_kg, 0),
       co2GramsPerTonneKm: toNumber(row.co2_grams_per_tonne_km, 0),
       customerSatisfaction: toNumber(row.customer_satisfaction, 0),
+      rating: row.rating !== undefined && row.rating !== null ? toNumber(row.rating, null) : null,
       profile: {
         address: row.address || '',
         postalCode: row.postal_code || '',
@@ -342,6 +343,9 @@ const buildProviderForImport = (base = {}, overrides = {}) => {
   };
 
   const profile = merged.profile || {};
+  const parsedRating = toNumber(merged.rating, null);
+  const normalizedRating =
+    parsedRating === null ? null : Math.max(1, Math.min(5, parsedRating));
 
   return {
     id: merged.id,
@@ -363,6 +367,7 @@ const buildProviderForImport = (base = {}, overrides = {}) => {
     minShipmentKg: toNumber(merged.minShipmentKg, 0),
     co2GramsPerTonneKm: toNumber(merged.co2GramsPerTonneKm, 0),
     customerSatisfaction: toNumber(merged.customerSatisfaction, 0),
+    rating: normalizedRating,
     profile: {
       address: profile.address || '',
       postalCode: profile.postalCode || '',
@@ -426,6 +431,7 @@ const updateProvider = async (externalRef, updates) => {
       minShipmentKg: base.minShipmentKg,
       co2GramsPerTonneKm: base.co2GramsPerTonneKm,
       customerSatisfaction: base.customerSatisfaction,
+      rating: base.rating,
       tariffDocumentUrl: base.tariffDocumentUrl,
       profile: base.profile,
     },

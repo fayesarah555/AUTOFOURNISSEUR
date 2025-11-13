@@ -62,6 +62,7 @@ const createDefaultFormState = () => ({
   id: "",
   name: "",
   description: "",
+  rating: "",
   profile: {
     address: "",
     postalCode: "",
@@ -235,6 +236,7 @@ const AdminProviders = ({ onLogout }) => {
       id: provider.id,
       name: provider.name || '',
       description: provider.description || '',
+      rating: provider.rating != null ? String(provider.rating) : '',
       profile: {
         address: profile.address || '',
         postalCode: profile.postalCode || '',
@@ -347,10 +349,16 @@ const AdminProviders = ({ onLogout }) => {
     const features = Array.from(new Set(formState.features));
     const deliveryDepartments = formState.deliveryDepartments.map(normalizeDepartment).filter(Boolean);
     const pickupDepartments = formState.pickupDepartments.map(normalizeDepartment).filter(Boolean);
+    const ratingNumber = Number(formState.rating);
+    const rating =
+      Number.isFinite(ratingNumber) && ratingNumber >= 1 && ratingNumber <= 5
+        ? Math.round(ratingNumber)
+        : undefined;
 
     return {
       name: formState.name,
       description: formState.description,
+      rating,
       coverage: 'domestic',
       contractFlexibility: 'spot',
       modes: ['road'],
@@ -753,6 +761,7 @@ const AdminProviders = ({ onLogout }) => {
                   <th>Adresse</th>
                   <th>Contact</th>
                   <th>Téléphone</th>
+                  <th>Note</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -772,6 +781,7 @@ const AdminProviders = ({ onLogout }) => {
                           <td>{provider.profile?.address || '--'}</td>
                           <td>{provider.profile?.contact || '--'}</td>
                           <td>{provider.profile?.phone || '--'}</td>
+                          <td>{provider.rating != null ? provider.rating : '--'}</td>
                           <td className="table-actions">
                             <button type="button" onClick={() => openEditModal(provider)}>
                               Modifier
@@ -844,6 +854,18 @@ const AdminProviders = ({ onLogout }) => {
                 <textarea
                   value={formState.description}
                   onChange={(e) => handleChange('description', e.target.value)}
+                />
+              </label>
+
+              <label>
+                <span>Note (1 à 5)</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="5"
+                  value={formState.rating}
+                  onChange={(e) => handleChange('rating', e.target.value)}
+                  placeholder="--"
                 />
               </label>
 
