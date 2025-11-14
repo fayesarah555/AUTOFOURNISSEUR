@@ -77,6 +77,15 @@ const createDefaultFormState = () => ({
   pickupDepartments: [],
 });
 
+const createDefaultTariffImportState = () => ({
+  providerId: '',
+  file: null,
+  mode: 'document',
+  loading: false,
+  status: null,
+  error: null,
+});
+
 const AdminProviders = ({ onLogout }) => {
   const [providers, setProviders] = useState([]);
   const [meta, setMeta] = useState(null);
@@ -108,14 +117,7 @@ const AdminProviders = ({ onLogout }) => {
 
   // Modal d'import de grille pour un fournisseur existant
   const [tariffImportModalOpen, setTariffImportModalOpen] = useState(false);
-  const [tariffImportState, setTariffImportState] = useState({
-    providerId: '',
-    file: null,
-    mode: 'document', // 'document' | 'catalog'
-    loading: false,
-    status: null,
-    error: null,
-  });
+  const [tariffImportState, setTariffImportState] = useState(() => createDefaultTariffImportState());
 
   const departmentOptions = useMemo(() => {
     const deliveryCodes = meta?.availableFilters?.deliveryDepartments || [];
@@ -139,10 +141,13 @@ const AdminProviders = ({ onLogout }) => {
   }, []);
 
   const openTariffImportModal = () => {
-    setTariffImportState({ providerId: '', file: null, loading: false, status: null, error: null });
+    setTariffImportState(createDefaultTariffImportState());
     setTariffImportModalOpen(true);
   };
-  const closeTariffImportModal = () => setTariffImportModalOpen(false);
+  const closeTariffImportModal = () => {
+    setTariffImportModalOpen(false);
+    setTariffImportState(createDefaultTariffImportState());
+  };
   const openTariffImportFor = async (providerId) => {
     try {
       await apiClient.get('/admin/providers/' + encodeURIComponent(providerId));
@@ -150,7 +155,10 @@ const AdminProviders = ({ onLogout }) => {
       alert('Transporteur introuvable. Rafraîchissez la liste ou réimportez-le.');
       return;
     }
-    setTariffImportState({ providerId, file: null, loading: false, status: null, error: null });
+    setTariffImportState({
+      ...createDefaultTariffImportState(),
+      providerId,
+    });
     setTariffImportModalOpen(true);
   };
   const handleTariffImportChange = (field) => (e) => {
@@ -189,8 +197,13 @@ const AdminProviders = ({ onLogout }) => {
       const response = await apiClient.post(endpoint, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      setTariffImportState((s) => ({ ...s, loading: false, status: response.data?.message || 'Import réalisé avec succès.' }));
-      fetchProviders();
+      setTariffImportState((s) => ({
+        ...s,
+        loading: false,
+        status: response.data?.message || 'Import réalisé avec succès.',
+      }));
+      await fetchProviders();
+      closeTariffImportModal();
     } catch (err) {
       setTariffImportState((s) => ({ ...s, loading: false, error: err?.response?.data?.error || "Échec de l'import de la grille." }));
     }

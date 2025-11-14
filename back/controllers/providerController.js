@@ -566,17 +566,74 @@ const convertExcelFileToPdfBuffer = async (filePath) => {
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
 
-    doc.fontSize(14).text('Grille tarifaire importée', { align: 'left' });
-    doc.moveDown();
-    doc.fontSize(10);
+    const normalizedRows = rows.map((row) =>
+      row.map((cell) => (cell === undefined || cell === null ? '' : String(cell)))
+    );
+    const firstContentIndex = normalizedRows.findIndex((row) => row.some((cell) => cell.trim()));
+    if (firstContentIndex === -1) {
+      throw new Error("Impossible d'identifier l'en-tête du fichier Excel.");
+    }
+    const headerRow = normalizedRows[firstContentIndex];
+    const dataRows = normalizedRows
+      .slice(firstContentIndex + 1)
+      .filter((row) => row.some((cell) => cell.trim()));
 
-    rows.forEach((row) => {
-      const line = row
-        .map((cell) => (cell === undefined || cell === null ? '' : String(cell)))
-        .join(' | ');
-      doc.text(line);
-      doc.moveDown(0.15);
-    });
+    doc.fontSize(14).text('Grille tarifaire importée', { align: 'left' });
+    doc.moveDown(0.75);
+
+    const tableStartX = doc.page.margins.left;
+    const tableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+    const columnCount = headerRow.length || 1;
+    const baseWidth = tableWidth / columnCount;
+    const columnWidths = headerRow.map(() => Math.max(60, baseWidth));
+    const totalColumnWidth = columnWidths.reduce((sum, width) => sum + width, 0);
+    const headerHeight = 22;
+    const rowHeight = 20;
+    let currentY = doc.y;
+    const maxY = doc.page.height - doc.page.margins.bottom;
+
+    const ensureSpace = (height) => {
+      if (currentY + height > maxY) {
+        doc.addPage();
+        currentY = doc.y;
+      }
+    };
+
+    const drawRow = (cells, { isHeader = false } = {}) => {
+      const height = isHeader ? headerHeight : rowHeight;
+      ensureSpace(height);
+      let cursorX = tableStartX;
+      doc.rect(cursorX, currentY, totalColumnWidth, height).stroke();
+      columnWidths.forEach((width, index) => {
+        doc.rect(cursorX, currentY, width, height).stroke();
+        const cellValue = (cells[index] || '').trim();
+        doc
+          .font(isHeader ? 'Helvetica-Bold' : 'Helvetica')
+          .fontSize(isHeader ? 10 : 9)
+          .fillColor('#0f172a')
+          .text(cellValue || '—', cursorX + 4, currentY + 5, {
+            width: width - 8,
+            height: height - 10,
+            align: isHeader ? 'center' : 'left',
+            ellipsis: true,
+          });
+        cursorX += width;
+      });
+      currentY += height;
+    };
+
+    drawRow(headerRow, { isHeader: true });
+    if (dataRows.length === 0) {
+      drawRow(['Aucune donnée détectée'], { isHeader: false });
+    } else {
+      dataRows.forEach((row) => {
+        const filledRow = [...row];
+        while (filledRow.length < columnCount) {
+          filledRow.push('');
+        }
+        drawRow(filledRow);
+      });
+    }
 
     doc.end();
   });
