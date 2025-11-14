@@ -58,19 +58,51 @@ const EXCEL_TEMPLATE_COLUMNS = {
   address: 'Adresse',
   postalCode: 'Code postal',
   city: 'Ville',
-  department: 'DÃ©partement',
+  department: 'Département',
   contact: 'Contact',
-  phone: 'TÃ©lÃ©phone',
+  phone: 'Téléphone',
   email: 'Email',
-  unreachable: 'Ne rÃ©pond pas (oui/non)',
-  deliveryDepartments: 'DÃ©partements livraison (codes sÃ©parÃ©s par des virgules)',
-  pickupDepartments: 'DÃ©partements chargement (codes sÃ©parÃ©s par des virgules)',
+  unreachable: 'Ne répond pas (oui/non)',
+  deliveryDepartments: 'Départements livraison (codes séparés par des virgules)',
+  pickupDepartments: 'Départements chargement (codes séparés par des virgules)',
   profileNotes: 'Notes internes',
-  profileFeatures: 'Ã‰quipements (sÃ©parÃ©s par des virgules)',
-  serviceCapabilities: 'Services (sÃ©parÃ©s par des virgules)',
-  modes: 'Modes (sÃ©parÃ©s par des virgules)',
+  profileFeatures: 'Equipements (séparés par des virgules)',
+  serviceCapabilities: 'Services (séparés par des virgules)',
+  modes: 'Modes (séparés par des virgules)',
   coverage: 'Couverture (domestic/global)',
   contractFlexibility: 'Contrat (spot/monthly/quarterly)',
+};
+
+const normalizeHeaderKey = (value) => {
+  if (value === undefined || value === null) {
+    return '';
+  }
+  return value
+    .toString()
+    .replace(/[\u01f8\u01f9]/g, 'e')
+    .replace(/\uFFFD/g, 'e')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/gi, '')
+    .toLowerCase();
+};
+
+const EXCEL_HEADER_LOOKUP = (() => {
+  const lookup = {};
+  Object.values(EXCEL_TEMPLATE_COLUMNS).forEach((label) => {
+    lookup[normalizeHeaderKey(label)] = label;
+  });
+  return lookup;
+})();
+
+const normalizeExcelRowHeaders = (row = {}) => {
+  const normalized = {};
+  Object.entries(row || {}).forEach(([key, value]) => {
+    const canonical = EXCEL_HEADER_LOOKUP[normalizeHeaderKey(key)];
+    const targetKey = canonical || key;
+    normalized[targetKey] = value;
+  });
+  return normalized;
 };
 
 const EXCEL_TEMPLATE_HEADER_ORDER = [
@@ -95,12 +127,12 @@ const EXCEL_TEMPLATE_HEADER_ORDER = [
 ];
 
 const EXCEL_TEMPLATE_SAMPLE_ROW = {
-  [EXCEL_TEMPLATE_COLUMNS.name]: '#EXEMPLE - Ã€ REMPLACER',
+  [EXCEL_TEMPLATE_COLUMNS.name]: '#EXEMPLE - A REMPLACER',
   [EXCEL_TEMPLATE_COLUMNS.description]:
-    'Transporteur rÃ©gional spÃ©cialisÃ© messagerie palette.',
+    'Transporteur régional spécialisé messagerie palette.',
   [EXCEL_TEMPLATE_COLUMNS.address]: '12 rue des Forges',
   [EXCEL_TEMPLATE_COLUMNS.postalCode]: '42000',
-  [EXCEL_TEMPLATE_COLUMNS.city]: 'Saint-Ã‰tienne',
+  [EXCEL_TEMPLATE_COLUMNS.city]: 'Saint-Etienne',
   [EXCEL_TEMPLATE_COLUMNS.department]: '42',
   [EXCEL_TEMPLATE_COLUMNS.contact]: 'Jean Dupont',
   [EXCEL_TEMPLATE_COLUMNS.phone]: '0601020304',
@@ -108,7 +140,7 @@ const EXCEL_TEMPLATE_SAMPLE_ROW = {
   [EXCEL_TEMPLATE_COLUMNS.unreachable]: 'non',
   [EXCEL_TEMPLATE_COLUMNS.deliveryDepartments]: '01, 03, 38, 69',
   [EXCEL_TEMPLATE_COLUMNS.pickupDepartments]: '42, 43, 63',
-  [EXCEL_TEMPLATE_COLUMNS.profileNotes]: 'Disponible 6j/7 - horaires Ã©tendus',
+  [EXCEL_TEMPLATE_COLUMNS.profileNotes]: 'Disponible 6j/7 - horaires étendus',
   [EXCEL_TEMPLATE_COLUMNS.profileFeatures]: 'semi-tautliner, porteur-hayon',
   [EXCEL_TEMPLATE_COLUMNS.serviceCapabilities]: 'express, adr',
   [EXCEL_TEMPLATE_COLUMNS.modes]: 'road',
@@ -266,7 +298,7 @@ const ALLOWED_TARIFF_FILE_TYPES = {
 
 const resolveTariffFileInfo = (file) => {
   if (!file) {
-    throw new Error('Aucun fichier reÃ§u.');
+    throw new Error('Aucun fichier.');
   }
 
   const originalName = (file.originalname || '').toLowerCase();
@@ -280,7 +312,7 @@ const resolveTariffFileInfo = (file) => {
     }
   }
 
-  throw new Error('Le fichier doit Ãªtre un PDF ou un Excel (.xls / .xlsx).');
+  throw new Error('Le fichier doit etre un PDF ou un Excel (.xls / .xlsx).');
 };
 
 const persistTariffDocumentForProvider = async (
@@ -358,17 +390,18 @@ const persistTariffDocumentForProvider = async (
 
 
 const buildProviderPayloadFromExcelRow = (row) => {
+  const normalizedRow = normalizeExcelRowHeaders(row);
   const getString = (key) => {
-    const value = row[key];
+    const value = normalizedRow[key];
     return value === undefined || value === null ? '' : value.toString().trim();
   };
 
-  const features = splitMultiValueInput(row[EXCEL_TEMPLATE_COLUMNS.profileFeatures]).map((value) =>
+  const features = splitMultiValueInput(normalizedRow[EXCEL_TEMPLATE_COLUMNS.profileFeatures]).map((value) =>
     value.toLowerCase()
   );
 
   const serviceCapabilities = splitMultiValueInput(
-    row[EXCEL_TEMPLATE_COLUMNS.serviceCapabilities]
+    normalizedRow[EXCEL_TEMPLATE_COLUMNS.serviceCapabilities]
   ).map((value) => value.toLowerCase());
 
   return {
@@ -376,7 +409,7 @@ const buildProviderPayloadFromExcelRow = (row) => {
     description: getString(EXCEL_TEMPLATE_COLUMNS.description),
     coverage: getString(EXCEL_TEMPLATE_COLUMNS.coverage) || 'domestic',
     contractFlexibility: getString(EXCEL_TEMPLATE_COLUMNS.contractFlexibility) || 'spot',
-    modes: splitMultiValueInput(row[EXCEL_TEMPLATE_COLUMNS.modes]).map((value) =>
+    modes: splitMultiValueInput(normalizedRow[EXCEL_TEMPLATE_COLUMNS.modes]).map((value) =>
       value.toLowerCase()
     ),
     serviceCapabilities,
@@ -388,10 +421,14 @@ const buildProviderPayloadFromExcelRow = (row) => {
       contact: getString(EXCEL_TEMPLATE_COLUMNS.contact),
       phone: getString(EXCEL_TEMPLATE_COLUMNS.phone),
       email: getString(EXCEL_TEMPLATE_COLUMNS.email),
-      unreachable: parseExcelBoolean(row[EXCEL_TEMPLATE_COLUMNS.unreachable]),
+      unreachable: parseExcelBoolean(normalizedRow[EXCEL_TEMPLATE_COLUMNS.unreachable]),
       features,
-      deliveryDepartments: parseDepartmentList(row[EXCEL_TEMPLATE_COLUMNS.deliveryDepartments]),
-      pickupDepartments: parseDepartmentList(row[EXCEL_TEMPLATE_COLUMNS.pickupDepartments]),
+      deliveryDepartments: parseDepartmentList(
+        normalizedRow[EXCEL_TEMPLATE_COLUMNS.deliveryDepartments]
+      ),
+      pickupDepartments: parseDepartmentList(
+        normalizedRow[EXCEL_TEMPLATE_COLUMNS.pickupDepartments]
+      ),
       notes: getString(EXCEL_TEMPLATE_COLUMNS.profileNotes),
     },
   };
@@ -404,10 +441,13 @@ const extractSingleProviderFromExcel = (filePath) => {
     return null;
   }
 
-  // 1) Tentative avec le modÃ¨le "simple" (une ligne, en-tÃªtes EXCEL_TEMPLATE_COLUMNS)
+  // 1) Tentative avec le modéle "simple" (une ligne, en-têtes EXCEL_TEMPLATE_COLUMNS)
   {
     const sheet = workbook.Sheets[firstSheetName];
-    const rows = xlsx.utils.sheet_to_json(sheet, { defval: '' });
+    const rows = xlsx
+      .utils
+      .sheet_to_json(sheet, { defval: '' })
+      .map((row) => normalizeExcelRowHeaders(row));
     const validRows = rows.filter((row) => {
       const name = (row[EXCEL_TEMPLATE_COLUMNS.name] || '').toString().trim();
       if (!name) {
@@ -420,14 +460,14 @@ const extractSingleProviderFromExcel = (filePath) => {
       return buildProviderPayloadFromExcelRow(validRows[0]);
     }
     if (validRows.length > 1) {
-      throw new Error('Le fichier modÃ¨le (simple) doit contenir un seul transporteur par import.');
+      throw new Error('Le fichier modéle (simple) doit contenir un seul transporteur par import.');
     }
   }
 
-  // 2) Fallback: essayer le modÃ¨le "dataset" (type Liste Global transporteurs.xlsx)
+  // 2) Fallback: essayer le modéle "dataset" (type Liste Global transporteurs.xlsx)
   try {
     // Utilise le parseur dataset existant pour construire des objets fournisseurs
-    // et ne garde que le premier si prÃ©sent.
+    // et ne garde que le premier si présent.
     const providersModule = require('../data/providers');
     if (typeof providersModule.loadFromExcel === 'function') {
       const list = providersModule.loadFromExcel(filePath) || [];
@@ -444,13 +484,13 @@ const extractSingleProviderFromExcel = (filePath) => {
     // ignore and fall through to null
   }
 
-  // Rien trouvÃ©
+  // Rien trouvé
   return null;
 };
 
-// Retourne une liste de fournisseurs Ã  partir d'un fichier Excel.
-// Accepte le modÃ¨le "simple" (en-tÃªtes EXCEL_TEMPLATE_COLUMNS) avec 1..N lignes,
-// ou le modÃ¨le "dataset" (type Liste Global transporteurs.xlsx).
+// Retourne une liste de fournisseurs à  partir d'un fichier Excel.
+// Accepte le modéle "simple" (en-têtes EXCEL_TEMPLATE_COLUMNS) avec 1..N lignes,
+// ou le modéle "dataset" (type Liste Global transporteurs.xlsx).
 const extractFlexibleProvidersFromExcel = (filePath) => {
   const workbook = xlsx.readFile(filePath);
   const [firstSheetName] = workbook.SheetNames;
@@ -460,9 +500,12 @@ const extractFlexibleProvidersFromExcel = (filePath) => {
 
   const sheet = workbook.Sheets[firstSheetName];
 
-  // 1) Essayer le modÃ¨le simple (colonnes EXCEL_TEMPLATE_COLUMNS)
+  // 1) Essayer le modéle simple (colonnes EXCEL_TEMPLATE_COLUMNS)
   try {
-    const rows = xlsx.utils.sheet_to_json(sheet, { defval: '' });
+    const rows = xlsx
+      .utils
+      .sheet_to_json(sheet, { defval: '' })
+      .map((row) => normalizeExcelRowHeaders(row));
     const validRows = rows.filter((row) => {
       const name = (row[EXCEL_TEMPLATE_COLUMNS.name] || '').toString().trim();
       if (!name) return false;
@@ -1092,7 +1135,7 @@ const getProvidersByIds = async (req, res, next) => {
   try {
     const ids = parseCsv(req.query.ids);
     if (ids.length === 0) {
-      return res.status(400).json({ error: 'ParamÃ¨tre ids requis.' });
+      return res.status(400).json({ error: 'Parametre ids requis.' });
     }
 
     const providers = await Promise.all(ids.map((id) => findProviderById(id)));
@@ -1101,7 +1144,7 @@ const getProvidersByIds = async (req, res, next) => {
       .map((provider) => enrichProvider(provider, req.query));
 
     if (results.length === 0) {
-      return res.status(404).json({ error: 'Aucun transporteur trouvÃ© pour les identifiants demandÃ©s.' });
+      return res.status(404).json({ error: 'Aucun transporteur trouvé pour les identifiants demandés.' });
     }
 
     return res.json({ data: results });
@@ -1210,7 +1253,7 @@ const normalizeProviderPayload = (input, { partial = false } = {}) => {
 
     const numeric = getNumber(data[field]);
     if (numeric === undefined) {
-      errors.push(`Le champ ${field} doit Ãªtre un nombre.`);
+      errors.push(`Le champ ${field} doit etre un nombre.`);
       return;
     }
 
@@ -1221,7 +1264,7 @@ const normalizeProviderPayload = (input, { partial = false } = {}) => {
     }
 
     if (resolved < min || resolved > max) {
-      errors.push(`Le champ ${field} doit Ãªtre compris entre ${min} et ${max}.`);
+      errors.push(`Le champ ${field} doit être compris entre ${min} et ${max}.`);
       return;
     }
 
@@ -1302,7 +1345,7 @@ const normalizeProviderPayload = (input, { partial = false } = {}) => {
   }
 
   if (partial && Object.keys(normalized).length === 0) {
-    errors.push('Aucun champ valide Ã  mettre Ã  jour.');
+    errors.push('Aucun champ valide à mettre à jour.');
   }
 
   return { errors, value: normalized };
@@ -1385,8 +1428,8 @@ const importSingleProviderWithTariff = async (req, res, next) => {
       error: 'Aucune donnée transporteur trouvée dans le modéle. Remplissez au moins une ligne.',
     });
   }
-  // Si plusieurs fournisseurs dans le fichier et un document tarifaire est prÃ©sent,
-  // refuser pour Ã©viter l'ambiguÃ¯tÃ©.
+  // Si plusieurs fournisseurs dans le fichier et un document tarifaire est présent,
+  // refuser pour éviter l'ambiguté.
   if (providerPayloads.length > 1 && tariffFile) {
     await cleanupUploadedFile(tariffFile);
     return res.status(400).json({
@@ -1412,7 +1455,7 @@ const importSingleProviderWithTariff = async (req, res, next) => {
       }
       const result = await importProviders(normalized, { sourceSheet: 'CUSTOM' });
       return res.status(201).json({
-        message: `${result.processed} fournisseur(s) importÃ©(s).`,
+        message: `${result.processed} fournisseur(s) importé(s).`,
         processed: result.processed,
       });
     } catch (error) {
@@ -1420,7 +1463,7 @@ const importSingleProviderWithTariff = async (req, res, next) => {
     }
   }
 
-  // Cas monoligne: procÃ©der comme avant avec option de document PDF/Excel
+  // Cas monoligne: procéder comme avant avec option de document PDF/Excel
   const { errors, value } = normalizeProviderPayload(providerPayloads[0]);
   if (errors.length > 0) {
     await cleanupUploadedFile(tariffFile);
@@ -1466,7 +1509,7 @@ const importSingleProviderWithTariff = async (req, res, next) => {
     await cleanupUploadedFile(tariffFile);
 
     return res.status(201).json({
-      message: 'Fournisseur importÃ© depuis le modÃ¨le Excel.',
+      message: 'Fournisseur importé depuis le modéle Excel.',
       data: enrichProvider(finalProvider),
     });
   } catch (error) {
@@ -1488,7 +1531,7 @@ const uploadProviderTariffDocument = async (req, res, next) => {
 
     if (!tempFile) {
       console.warn('[providers][uploadTariff] no file received', { providerId: id });
-      return res.status(400).json({ error: 'Aucun fichier reÃ§u.' });
+      return res.status(400).json({ error: 'Aucun fichier.' });
     }
 
     let fileInfo;
@@ -1683,11 +1726,11 @@ const downloadProviderImportTemplate = (_req, res) => {
   return res.send(buffer);
 };
 
-// ModÃ¨le alignÃ© sur "Liste Global transporteurs.xlsx"
+// Modéle aligné sur "Liste Global transporteurs.xlsx"
 const buildProviderDatasetTemplateBuffer = () => {
   const workbook = xlsx.utils.book_new();
 
-  // Lignes d'en-tÃªte (2 lignes)
+  // Lignes d'en-tête (2 lignes)
   const headerTop = [];
   const headerSecond = [];
 
@@ -1700,26 +1743,26 @@ const buildProviderDatasetTemplateBuffer = () => {
   [
     'Nom Transporteur',
     'Adresse',
-    'DÃ©partement',
+    'Département',
     'Ville',
     'Nom de Contact',
-    'TÃ©lÃ©phone',
-    'Ne RÃ©pond pas ',
+    'Téléphone',
+    'Ne Répond pas ',
   ].forEach((label) => push('', label));
 
-  // DÃ©partements livraisons (exemple de quelques codes)
-  ['01', '69', '75'].forEach((dept) => push('DÃ©partement de livraisons', dept));
-  // DÃ©partements chargement (exemple)
-  ['42', '69'].forEach((dept) => push('DÃ©partement de Chargement', dept));
+  // Départements livraisons (exemple de quelques codes)
+  ['01', '69', '75'].forEach((dept) => push('Département de livraisons', dept));
+  // Départements chargement (exemple)
+  ['42', '69'].forEach((dept) => push('Département de Chargement', dept));
 
-  // Groupes d'Ã©quipements / services (suivent featureDictionary)
+  // Groupes d'équipements / services (suivent featureDictionary)
   ['Semi- Type', 'Taut '];
   [
     ['Semi- Type', ['Taut ', 'Fourgon', 'Frigo', 'Semi-Hayon']],
-    ['Porteurs-Type', ['Porteur tolÃ©', 'Porteur Taut', 'Hayon']],
+    ['Porteurs-Type', ['Porteur tolé', 'Porteur Taut', 'Hayon']],
     ['VL ', ['VL ']],
     ['Express', ['EXPRESS']],
-    ['Moyens de manutention', ['GRUE', 'Chariot EmbarquÃ©', 'FOSSES', 'Porte-chars', 'convois exceptionnels']],
+    ['Moyens de manutention', ['GRUE', 'Chariot Embarqué', 'FOSSES', 'Porte-chars', 'convois exceptionnels']],
     ['ADR', ['ADR']],
     ['international', ['INTERNATIONAL']],
   ].forEach(([top, seconds]) => {
@@ -1738,19 +1781,19 @@ const buildProviderDatasetTemplateBuffer = () => {
   };
   setBySecond('Nom Transporteur', 'EXEMPLE TRANSPORTEUR');
   setBySecond('Adresse', '12 rue des Forges');
-  setBySecond('DÃ©partement', '69');
+  setBySecond('Département', '69');
   setBySecond('Ville', '69000 Lyon');
   setBySecond('Nom de Contact', 'Jean Dupont');
-  setBySecond('TÃ©lÃ©phone', '0601020304');
-  setBySecond('Ne RÃ©pond pas ', '');
+  setBySecond('Téléphone', '0601020304');
+  setBySecond('Ne Répond pas ', '');
 
-  // Exemples de dÃ©partements livraisons/chargement cochÃ©s
+  // Exemples de départements livraisons/chargement cochés
   setBySecond('01', 'x');
   setBySecond('69', 'x');
   setBySecond('75', '');
   setBySecond('42', 'x');
 
-  // Exemples dâ€™Ã©quipements
+  // Exemples dâ€™équipements
   ['Taut ', 'Hayon', 'EXPRESS', 'GRUE'].forEach((sec) => setBySecond(sec, 'x'));
 
   rows.push(data);
@@ -1773,7 +1816,7 @@ const downloadProviderDatasetTemplate = (_req, res) => {
   return res.send(buffer);
 };
 
-// GÃ©nÃ¨re un modÃ¨le Excel simple pour une grille tarifaire Ã  remplir
+// Génére un modéle Excel simple pour une grille tarifaire à remplir
 const buildTariffGridTemplateBuffer = () => {
   const workbook = xlsx.utils.book_new();
   const header = [
@@ -1786,13 +1829,13 @@ const buildTariffGridTemplateBuffer = () => {
     'Prix au km (optionnel)'
   ];
 
-  // Exemple complet couvrant dÃ©partements et plages de distances
+  // Exemple complet couvrant départements et plages de distances
   const rows = [
     header,
-    // Par dÃ©partement (code ou libellÃ© + code)
+    // Par département (code ou libellé + code)
     ['Paris (75)', 120, 210, 300, 380, 450, ''],
     ['69',         110, 195, 280, 360, 430, ''],
-    // Par plages de distances (avec prix au km renseignÃ©)
+    // Par plages de distances (avec prix au km renseigné)
     ['0-50 km',    90,  160, 230, 300, 360, 1.10],
     ['51-100 km',  130, 210, 290, 370, 440, 1.30],
     ['101-200 km', 180, 270, 360, 450, 530, 1.50],
@@ -1957,7 +2000,7 @@ const formatPrice = (value) => {
 const buildTariffCatalogPdfBuffer = (provider, options = {}) =>
   new Promise((resolve, reject) => {
     const { rows, palletCounts } = buildTariffTableModel(options.lines || []);
-  const doc = new PDFDocument({ margin: 36, size: 'A4' });
+    const doc = new PDFDocument({ margin: 36, size: 'A4' });
     const chunks = [];
     doc.on('data', (chunk) => chunks.push(chunk));
     doc.on('end', () => resolve(Buffer.concat(chunks)));
@@ -1980,19 +2023,33 @@ const buildTariffCatalogPdfBuffer = (provider, options = {}) =>
       return;
     }
 
+    const formatCurrency = (value) =>
+      typeof value === 'number' && Number.isFinite(value) ? `${formatPrice(value)} €` : '--';
+
+    const chunkArray = (array, size) => {
+      if (!Array.isArray(array) || !array.length) {
+        return [[]];
+      }
+      const chunks = [];
+      for (let i = 0; i < array.length; i += size) {
+        chunks.push(array.slice(i, i + size));
+      }
+      return chunks;
+    };
+
+    const MAX_PALLET_COLUMNS = 4;
+    const chunkedPalletCounts = chunkArray(palletCounts, MAX_PALLET_COLUMNS);
     const baseColumns = [
-      { key: 'destinationLabel', label: 'Destination', width: 130 },
-      { key: 'zoneLabel', label: 'Zone / Distance', width: 120 },
-      { key: 'pricePerKm', label: 'Prix/km', width: 70, formatter: (value) => (value != null ? `${formatPrice(value)} €` : '--') },
+      { key: 'destinationLabel', label: 'Destination', width: 120 },
+      { key: 'zoneLabel', label: 'Zone / Distance', width: 100 },
+      {
+        key: 'pricePerKm',
+        label: 'Prix/km',
+        width: 60,
+        formatter: formatCurrency,
+        align: 'right',
+      },
     ];
-    const palletColumns = palletCounts.map((count) => ({
-      key: `pallet_${count}`,
-      label: `${count} palette${count > 1 ? 's' : ''}`,
-      width: 70,
-      formatter: (value) => (value != null ? `${formatPrice(value)} €` : '--'),
-      palletCount: count,
-    }));
-    const columns = [...baseColumns, ...palletColumns];
     const rowHeight = 20;
     const headerHeight = 22;
     let currentY = doc.y + 10;
@@ -2006,44 +2063,69 @@ const buildTariffCatalogPdfBuffer = (provider, options = {}) =>
       }
     };
 
-    const drawRow = (cells, options = {}) => {
-      const { isHeader = false } = options;
-      const height = isHeader ? headerHeight : rowHeight;
-      ensureSpace(height);
-      let cursorX = tableStartX;
-      doc.rect(cursorX, currentY, columns.reduce((sum, col) => sum + col.width, 0), height).stroke();
-      columns.forEach((column) => {
-        doc.rect(cursorX, currentY, column.width, height).stroke();
-        const cellValue = cells[column.key] ?? '';
-        doc
-          .font(isHeader ? 'Helvetica-Bold' : 'Helvetica')
-          .fontSize(isHeader ? 9 : 8)
-          .fillColor(isHeader ? '#0f172a' : '#111827')
-          .text(cellValue, cursorX + 4, currentY + 4, {
+    const drawTable = (palletCountSlice, index) => {
+      if (index > 0) {
+        doc.moveDown(0.75);
+        currentY = doc.y;
+      }
+
+      const palletColumns = palletCountSlice.map((count) => ({
+        key: `pallet_${count}`,
+        label: `${count} palette${count > 1 ? 's' : ''}`,
+        width: 60,
+        formatter: formatCurrency,
+        align: 'right',
+        palletCount: count,
+      }));
+
+      const columns = [...baseColumns, ...palletColumns];
+      const tableWidth = columns.reduce((sum, col) => sum + col.width, 0);
+
+      const drawRow = (cells, options = {}) => {
+        const { isHeader = false } = options;
+        const height = isHeader ? headerHeight : rowHeight;
+        ensureSpace(height);
+        let cursorX = tableStartX;
+        doc.rect(cursorX, currentY, tableWidth, height).stroke();
+        columns.forEach((column) => {
+          doc.rect(cursorX, currentY, column.width, height).stroke();
+          const cellValue = cells[column.key] ?? '';
+          const textOptions = {
             width: column.width - 8,
             height: height - 8,
-          });
-        cursorX += column.width;
+            align: column.align || 'left',
+          };
+          doc
+            .font(isHeader ? 'Helvetica-Bold' : 'Helvetica')
+            .fontSize(isHeader ? 9 : 8)
+            .fillColor(isHeader ? '#0f172a' : '#111827')
+            .text(cellValue, cursorX + 4, currentY + 4, textOptions);
+          cursorX += column.width;
+        });
+        currentY += height;
+      };
+
+      const headerCells = columns.reduce(
+        (acc, column) => ({ ...acc, [column.key]: column.label }),
+        {}
+      );
+      drawRow(headerCells, { isHeader: true });
+
+      rows.forEach((row) => {
+        const cells = {
+          destinationLabel: row.destinationLabel,
+          zoneLabel: row.zoneLabel,
+          pricePerKm: baseColumns[2].formatter(row.pricePerKm),
+        };
+        palletColumns.forEach((column) => {
+          cells[column.key] = column.formatter(row.pallets[column.palletCount]);
+        });
+        drawRow(cells);
       });
-      currentY += height;
     };
 
-    const headerCells = columns.reduce(
-      (acc, column) => ({ ...acc, [column.key]: column.label }),
-      {}
-    );
-    drawRow(headerCells, { isHeader: true });
-
-    rows.forEach((row) => {
-      const cells = {
-        destinationLabel: row.destinationLabel,
-        zoneLabel: row.zoneLabel,
-        pricePerKm: columns[2].formatter(row.pricePerKm),
-      };
-      palletColumns.forEach((column) => {
-        cells[column.key] = column.formatter(row.pallets[column.palletCount]);
-      });
-      drawRow(cells);
+    chunkedPalletCounts.forEach((slice, index) => {
+      drawTable(slice, index);
     });
 
     doc.moveDown(0.5);
@@ -2068,7 +2150,7 @@ const getProviderBaseTariffGrid = async (req, res, next) => {
     const departureDepartment = resolveDepartureDepartment(provider);
     if (!departureDepartment) {
       return res.status(400).json({
-        error: 'Impossible de dÃ©terminer le dÃ©partement de dÃ©part du transporteur.',
+        error: 'Impossible de déterminer le département de départ du transporteur.',
       });
     }
 
@@ -2114,7 +2196,7 @@ module.exports = {
   getProviderBaseTariffGrid,
 };
 
-// Importe une grille tarifaire (catalogue + lignes) pour un fournisseur existant Ã  partir d'un modÃ¨le Excel
+// Importe une grille tarifaire (catalogue + lignes) pour un fournisseur existant à partir d'un modéle Excel
 async function importTariffCatalogFromExcel(req, res, next) {
   const tempFile = req.file;
   try {
@@ -2123,7 +2205,7 @@ async function importTariffCatalogFromExcel(req, res, next) {
       return res.status(400).json({ error: 'Identifiant fournisseur requis.' });
     }
     if (!tempFile?.path) {
-      return res.status(400).json({ error: 'Aucun fichier reÃ§u.' });
+      return res.status(400).json({ error: 'Aucun fichier .' });
     }
 
     const workbook = xlsx.readFile(tempFile.path);
@@ -2137,12 +2219,12 @@ async function importTariffCatalogFromExcel(req, res, next) {
     const rows = xlsx.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: '' });
     if (rows.length < 2) {
       await cleanupUploadedFile(tempFile);
-      return res.status(400).json({ error: 'ModÃ¨le invalide: en-tÃªtes manquants.' });
+      return res.status(400).json({ error: 'Modéle invalide: en-têtes manquants.' });
     }
 
     const header = rows[0].map((c) => (c || '').toString().trim());
     const destColIndex = 0;
-    // Colonnes palette: dÃ©tecter "X palette" dans l'en-tÃªte
+    // Colonnes palette: détecter "X palette" dans l'en-tête
     const paletteCols = [];
     header.forEach((label, idx) => {
       const m = label.match(/^(\d+)\s*palette/iu);
@@ -2175,12 +2257,12 @@ async function importTariffCatalogFromExcel(req, res, next) {
           return { type: 'distance', min: Math.min(a, b), max: Math.max(a, b) };
         }
       }
-      // DÃ©partement avec code entre parenthÃ¨ses: "Paris (75)"
+      // Département avec code entre parenthèses: "Paris (75)"
       const mDeptParen = raw.match(/\((\d{2})\)/);
       if (mDeptParen) {
         return { type: 'department', code: mDeptParen[1] };
       }
-      // Code dÃ©partement brut (ex: "75")
+      // Code département brut (ex: "75")
       const mDept = raw.match(/^(\d{2})$/);
       if (mDept) {
         return { type: 'department', code: mDept[1] };
