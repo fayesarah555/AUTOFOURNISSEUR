@@ -273,6 +273,47 @@
   min-width: 140px;
 }
 
+.tariff-section {
+  padding: 10px 12px;
+  border: 1px solid var(--color-border, #e3e7f0);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--color-soft, #f1f3f8);
+}
+
+.tariff-section-title {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text, #0f172a);
+}
+
+.tariff-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.tariff-primary-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.small-btn {
+  border: none;
+  background: var(--color-accent, #ef4c54);
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 .tariff-upload-hint {
   font-size: 0.75rem;
   color: var(--color-muted, #70819a);
@@ -280,6 +321,71 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.tariff-documents-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tariff-documents-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.04);
+  font-size: 0.8rem;
+}
+
+.tariff-document-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tariff-document-info small {
+  color: var(--color-muted, #70819a);
+  font-size: 0.75rem;
+}
+
+.tariff-documents-list a {
+  color: var(--color-accent, #ef4c54);
+  text-decoration: none;
+  font-weight: 600;
+  flex: 1;
+}
+
+.tariff-documents-list a:hover {
+  text-decoration: underline;
+}
+
+.tariff-documents-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.tariff-documents-actions button {
+  border: none;
+  background: none;
+  color: var(--color-accent, #ef4c54);
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 0;
+}
+
+.link-button {
+  border: none;
+  background: none;
+  color: var(--color-accent, #ef4c54);
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
 }
 
 .admin-error {

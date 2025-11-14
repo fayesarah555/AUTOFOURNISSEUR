@@ -181,6 +181,7 @@ const hydrateProviders = async (supplierRows) => {
   }
 
   const contactMap = new Map();
+  const tariffDocsBySupplier = new Map();
   for (const contact of contactRows) {
     if (!supplierIdSet.has(contact.supplier_id)) {
       continue;
@@ -247,6 +248,21 @@ const hydrateProviders = async (supplierRows) => {
         pickupDepartments,
       },
     };
+
+    const attachedDocuments = (tariffDocsBySupplier.get(row.id) || []).map((doc) => ({
+      id: doc.id,
+      filename: doc.filename,
+      originalName: doc.original_name || doc.filename,
+      format: doc.format,
+      sizeBytes: doc.size_bytes || null,
+      createdAt: doc.created_at,
+      downloadUrl: `/api/providers/${id}/tariff-documents/${doc.id}`,
+    }));
+
+    provider.tariffDocuments = attachedDocuments;
+    if (attachedDocuments.length > 0) {
+      provider.hasTariffDocument = true;
+    }
 
     if (!provider.profile.department && provider.profile.deliveryDepartments.length > 0) {
       provider.profile.department = provider.profile.deliveryDepartments[0];
@@ -318,6 +334,14 @@ const getTariffDocumentDefinition = async (externalRefOrId) => {
     externalRef: row.external_ref || String(externalRefOrId),
     explicitPath: row.tariff_document_url || '',
   };
+};
+
+const findSupplierRowByExternalRef = async (externalRef) => {
+  if (!externalRef) {
+    return null;
+  }
+  const rows = await fetchSuppliers(externalRef);
+  return rows[0] || null;
 };
 
 const ensureUniqueExternalRef = async (candidate, baseName) => {
@@ -473,6 +497,108 @@ const deleteProvider = async (externalRefOrId) => {
   return false;
 };
 
+const addTariffDocumentRecord = async (supplierId, data) => {
+  const result = await pool.query(
+    `INSERT INTO supplier_tariff_documents
+      (supplier_id, filename, original_name, mime_type, format, size_bytes)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [
+      supplierId,
+      data.filename,
+      data.originalName || null,
+      data.mimeType || null,
+      data.format || 'pdf',
+      data.sizeBytes || null,
+    ]
+  );
+  return { id: Number(result.insertId), ...data };
+};
+
+const findTariffDocumentRecord = async (supplierId, documentId) => {
+  const rows = await pool.query(
+    'SELECT * FROM supplier_tariff_documents WHERE supplier_id = ? AND id = ?',
+    [supplierId, documentId]
+  );
+  return rows[0] || null;
+};
+
+const deleteTariffDocumentRecord = async (supplierId, documentId) => {
+  const result = await pool.query(
+    'DELETE FROM supplier_tariff_documents WHERE supplier_id = ? AND id = ?',
+    [supplierId, documentId]
+  );
+  return result.affectedRows > 0;
+};
+
+const getPrimaryTariffCatalogRow = async (supplierId) => {
+  if (!supplierId) {
+    return null;
+  }
+  const rows = await pool.query(
+    `SELECT *
+     FROM tariff_catalogs
+     WHERE supplier_id = ?
+     ORDER BY valid_from IS NULL DESC, id ASC
+     LIMIT 1`,
+    [supplierId]
+  );
+  return rows[0] || null;
+};
+
+const getOrCreatePrimaryTariffCatalog = async (supplierId) => {
+  if (!supplierId) {
+    throw new Error('supplierId requis');
+  }
+  const existing = await getPrimaryTariffCatalogRow(supplierId);
+  if (existing) {
+    return existing;
+  }
+  const label = 'Catalogue principal';
+  const result = await pool.query(
+    `INSERT INTO tariff_catalogs (supplier_id, label, currency, incoterm, valid_from, valid_to, comment)
+     VALUES (?, ?, 'EUR', NULL, CURRENT_DATE, NULL, NULL)`,
+    [supplierId, label]
+  );
+  return {
+    id: Number(result.insertId),
+    supplier_id: supplierId,
+    label,
+    currency: 'EUR',
+    incoterm: null,
+    valid_from: new Date(),
+    valid_to: null,
+    comment: null,
+  };
+};
+
+const getTariffLinesForSupplier = async (supplierId) => {
+  const catalog = await getPrimaryTariffCatalogRow(supplierId);
+  if (!catalog) {
+    return { catalog: null, lines: [] };
+  }
+  const lines = await pool.query(
+    `SELECT
+        id,
+        tariff_catalog_id,
+        origin_department,
+        destination_department,
+        min_distance_km,
+        max_distance_km,
+        pallet_count,
+        base_price,
+        price_per_km
+     FROM tariff_lines
+     WHERE tariff_catalog_id = ?
+     ORDER BY
+       CASE WHEN destination_department IS NULL THEN 1 ELSE 0 END,
+       destination_department,
+       min_distance_km,
+       pallet_count`,
+    [catalog.id]
+  );
+  return { catalog, lines };
+};
+
 const updateProviderTariffDocumentPath = async (externalRef, filename) => {
   if (!externalRef) {
     return null;
@@ -496,21 +622,43 @@ const resetProviders = async () => {
   return false;
 };
 
+const ensureUniqueCatalogLabel = async (supplierId, baseLabel) => {
+  let attempt = 1;
+  let candidate = baseLabel;
+  const sql = 'SELECT id FROM tariff_catalogs WHERE supplier_id = ? AND label = ? LIMIT 1';
+  while (attempt < 50) {
+    const existing = await pool.query(sql, [supplierId, candidate]);
+    if (!existing.length) {
+      return candidate;
+    }
+    attempt += 1;
+    candidate = `${baseLabel} (${attempt})`;
+  }
+  throw new Error('Impossible de générer un libellé unique pour la grille tarifaire.');
+};
+
 module.exports = {
   listProviders,
   findProviderById,
+  findSupplierRowByExternalRef,
   getTariffDocumentDefinition,
   addProvider,
   updateProvider,
   deleteProvider,
   updateProviderTariffDocumentPath,
+  addTariffDocumentRecord,
+  findTariffDocumentRecord,
+  deleteTariffDocumentRecord,
+  getOrCreatePrimaryTariffCatalog,
+  getTariffLinesForSupplier,
   resetProviders,
   // Tariff DB helpers
   createTariffCatalogForSupplier: async (supplierId, { label, currency = 'EUR', incoterm = null, validFrom = null, validTo = null, comment = null } = {}) => {
     if (!supplierId) {
       throw new Error('supplierId requis');
     }
-    const resolvedLabel = label || `Grille importée ${new Date().toISOString().slice(0, 10)}`;
+    const baseLabel = label || `Grille importée ${new Date().toISOString().slice(0, 10)}`;
+    const resolvedLabel = await ensureUniqueCatalogLabel(supplierId, baseLabel);
     const sql = `
       INSERT INTO tariff_catalogs (supplier_id, label, currency, incoterm, valid_from, valid_to, comment)
       VALUES (?, ?, ?, ?, COALESCE(?, CURRENT_DATE), ?, ?)

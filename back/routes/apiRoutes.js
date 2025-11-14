@@ -12,6 +12,7 @@ const {
   updateProvider,
   deleteProvider,
   getProviderTariffDocument,
+  downloadAdditionalTariffDocument,
   getProviderBaseTariffGrid,
   importSingleProviderWithTariff,
   uploadProviderTariffDocument,
@@ -39,6 +40,7 @@ const providerExcelUpload = upload.fields([
 router.get('/providers', listProviders);
 router.get('/providers/batch', getProvidersByIds);
 router.get('/providers/:id/tariff-document', getProviderTariffDocument);
+router.get('/providers/:id/tariff-documents/:documentId', downloadAdditionalTariffDocument);
 router.get('/providers/:id/base-tariff-grid', getProviderBaseTariffGrid);
 router.get('/providers/:id', getProviderById);
 

@@ -115,6 +115,20 @@ CREATE TABLE IF NOT EXISTS suppliers (
     ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
+CREATE TABLE IF NOT EXISTS supplier_tariff_documents (
+  id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  supplier_id     BIGINT UNSIGNED NOT NULL,
+  filename        VARCHAR(255) NOT NULL,
+  original_name   VARCHAR(255),
+  mime_type       VARCHAR(128),
+  format          ENUM('pdf','excel') NOT NULL DEFAULT 'pdf',
+  size_bytes      BIGINT UNSIGNED,
+  created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_tariff_documents_supplier
+    FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB;
+
 CREATE TABLE IF NOT EXISTS supplier_contacts (
   id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   supplier_id     BIGINT UNSIGNED NOT NULL,

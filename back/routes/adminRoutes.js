@@ -8,6 +8,8 @@ const {
   deleteProvider,
   importSingleProviderWithTariff,
   uploadProviderTariffDocument,
+  addAdditionalTariffDocument,
+  deleteAdditionalTariffDocument,
   downloadProviderImportTemplate,
   downloadProviderDatasetTemplate,
   downloadTariffGridTemplate,
@@ -52,6 +54,17 @@ router.post(
   requireAdmin,
   upload.single('file'),
   uploadProviderTariffDocument
+);
+router.post(
+  '/providers/:id/tariff-documents',
+  requireAdmin,
+  upload.single('file'),
+  addAdditionalTariffDocument
+);
+router.delete(
+  '/providers/:id/tariff-documents/:documentId',
+  requireAdmin,
+  deleteAdditionalTariffDocument
 );
 router.post(
   '/providers/:id/tariff-catalogs/import',
