@@ -1152,6 +1152,29 @@ body {
   overflow: hidden;
 }
 
+.tariff-modal__tabs {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tariff-modal__tab {
+  border: 1px solid #cbd5f5;
+  background: #f8fafc;
+  color: #1e293b;
+  font-size: 0.85rem;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tariff-modal__tab.is-active {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: #fff;
+}
+
 .tariff-modal__body--grid {
   padding-bottom: 24px;
   gap: 16px;

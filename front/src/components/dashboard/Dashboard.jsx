@@ -420,8 +420,8 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
   const [tariffModal, setTariffModal] = useState({
     open: false,
     provider: null,
-    url: null,
-    type: null,
+    documents: [],
+    selectedIndex: 0,
     error: null,
   });
   const [tariffGridModal, setTariffGridModal] = useState({
@@ -842,27 +842,61 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
   }, [appliedDistanceKm]);
 
 
-  const tariffViewerUrl = useMemo(() => {
-    if (!tariffModal.open || tariffModal.error || !tariffModal.url) {
+  const resolvedTariffDocuments = useMemo(() => {
+    if (!tariffModal.open || !Array.isArray(tariffModal.documents)) {
+      return [];
+    }
+    const apiBase = (apiClient.defaults?.baseURL || '').replace(/\/$/, '');
+    return tariffModal.documents.map((doc) => {
+      let baseUrl = (doc.url || '').trim();
+      if (!baseUrl && doc.endpoint) {
+        baseUrl = doc.endpoint;
+      }
+      if (baseUrl && !/^https?:\/\//i.test(baseUrl)) {
+        baseUrl = apiBase ? `${apiBase}${baseUrl.startsWith('/') ? '' : '/'}${baseUrl}` : baseUrl;
+      }
+      return {
+        ...doc,
+        url: baseUrl,
+      };
+    });
+  }, [tariffModal.open, tariffModal.documents]);
+
+  const activeTariffDocument = useMemo(() => {
+    if (!tariffModal.open || tariffModal.error) {
       return null;
     }
-    if (tariffModal.type === 'local') {
-      const separator = tariffModal.url.includes('?') ? '&' : '?';
-      return `${tariffModal.url}${separator}inline=1`;
+    if (resolvedTariffDocuments.length === 0) {
+      return null;
     }
-    return tariffModal.url;
-  }, [tariffModal.open, tariffModal.error, tariffModal.url, tariffModal.type]);
+    const index =
+      tariffModal.selectedIndex >= 0 && tariffModal.selectedIndex < resolvedTariffDocuments.length
+        ? tariffModal.selectedIndex
+        : 0;
+    return resolvedTariffDocuments[index];
+  }, [tariffModal.open, tariffModal.error, resolvedTariffDocuments, tariffModal.selectedIndex]);
+
+  const tariffViewerUrl = useMemo(() => {
+    if (!tariffModal.open || tariffModal.error || !activeTariffDocument?.url) {
+      return null;
+    }
+    if (activeTariffDocument.type === 'local') {
+      const separator = activeTariffDocument.url.includes('?') ? '&' : '?';
+      return `${activeTariffDocument.url}${separator}inline=1`;
+    }
+    return activeTariffDocument.url;
+  }, [tariffModal.open, tariffModal.error, activeTariffDocument]);
 
   const tariffDownloadUrl = useMemo(() => {
-    if (!tariffModal.open || tariffModal.error || !tariffModal.url) {
+    if (!tariffModal.open || tariffModal.error || !activeTariffDocument?.url) {
       return null;
     }
-    if (tariffModal.type === 'local') {
-      const separator = tariffModal.url.includes('?') ? '&' : '?';
-      return `${tariffModal.url}${separator}download=1`;
+    if (activeTariffDocument.type === 'local') {
+      const separator = activeTariffDocument.url.includes('?') ? '&' : '?';
+      return `${activeTariffDocument.url}${separator}download=1`;
     }
-    return tariffModal.url;
-  }, [tariffModal.open, tariffModal.error, tariffModal.url, tariffModal.type]);
+    return activeTariffDocument.url;
+  }, [tariffModal.open, tariffModal.error, activeTariffDocument]);
 
   const handleApplyFilters = useCallback(() => {
     const totals = cargoSelections.length
@@ -900,40 +934,51 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
       return;
     }
 
-    if (!provider.hasTariffDocument) {
+    const documents = [];
+    const primaryUrl = (provider.tariffDocumentUrl || '').trim();
+    if (provider.hasTariffDocument && primaryUrl) {
+      documents.push({
+        id: `primary-${provider.id}`,
+        title: provider.tariffDocumentFilename || 'Document principal',
+        url: primaryUrl,
+        type: provider.tariffDocumentType || 'local',
+        isAdditional: false,
+        documentId: null,
+      });
+    }
+    if (Array.isArray(provider.tariffDocuments)) {
+      provider.tariffDocuments.forEach((doc) => {
+        if (!doc) {
+          return;
+        }
+        documents.push({
+          id: `additional-${doc.id}`,
+          title: doc.originalName || doc.filename,
+          url: doc.downloadUrl || '',
+          type: 'local',
+          isAdditional: true,
+          documentId: doc.id,
+          endpoint: doc.downloadUrl || `/api/providers/${provider.id}/tariff-documents/${doc.id}`,
+        });
+      });
+    }
+
+    if (documents.length === 0) {
       setTariffModal({
         open: true,
         provider,
-        url: null,
-        type: null,
+        documents: [],
+        selectedIndex: 0,
         error: "Aucune grille tarifaire disponible pour ce transporteur.",
       });
       return;
     }
 
-    let baseUrl = (provider.tariffDocumentUrl || '').trim();
-    if (baseUrl) {
-      // If relative, prefix with API base URL when available
-      const isAbsolute = /^https?:\/\//i.test(baseUrl);
-      if (!isAbsolute) {
-        const apiBase = (apiClient.defaults?.baseURL || '').replace(/\/$/, '');
-        if (apiBase) {
-          baseUrl = `${apiBase}${baseUrl.startsWith('/') ? '' : '/'}${baseUrl}`;
-        }
-      }
-    } else {
-      const apiBase = (apiClient.defaults?.baseURL || '').replace(/\/$/, '');
-      const id = encodeURIComponent(provider.id);
-      baseUrl = apiBase
-        ? `${apiBase}/api/providers/${id}/tariff-document`
-        : `/api/providers/${id}/tariff-document`;
-    }
-
     setTariffModal({
       open: true,
       provider,
-      url: baseUrl,
-      type: provider.tariffDocumentType || 'local',
+      documents,
+      selectedIndex: 0,
       error: null,
     });
   }, []);
@@ -942,8 +987,8 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
     setTariffModal({
       open: false,
       provider: null,
-      url: null,
-      type: null,
+      documents: [],
+      selectedIndex: 0,
       error: null,
     });
   }, []);
@@ -1870,6 +1915,22 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                 <p className="tariff-modal__message">{tariffModal.error}</p>
               ) : (
                 <>
+                  {resolvedTariffDocuments.length > 1 && (
+                    <div className="tariff-modal__tabs">
+                      {resolvedTariffDocuments.map((doc, index) => (
+                        <button
+                          key={doc.id || index}
+                          type="button"
+                          className={`tariff-modal__tab${index === tariffModal.selectedIndex ? ' is-active' : ''}`}
+                          onClick={() =>
+                            setTariffModal((prev) => ({ ...prev, selectedIndex: index }))
+                          }
+                        >
+                          {doc.title || `Document ${index + 1}`}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   {tariffViewerUrl ? (
                     <iframe
                       key={tariffViewerUrl}
@@ -1880,9 +1941,9 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                   ) : (
                     <p className="tariff-modal__message">Chargement du document...</p>
                   )}
-                  {tariffModal.type === 'remote' && (
+                  {activeTariffDocument?.type === 'remote' && (
                     <p className="tariff-modal__hint">
-                      Le document est hébergé sur un site externe. Utilisez le bouton d&apos;ouverture si l&apos;aperçu ne s&apos;affiche pas.
+                      Le document est hébergé sur un site externe. Utilisez le bouton d'ouverture si l'aperçu ne s'affiche pas.
                     </p>
                   )}
                 </>
@@ -1895,11 +1956,11 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
               {!tariffModal.error && tariffDownloadUrl && (
                 <a
                   href={tariffDownloadUrl}
-                  target={tariffModal.type === 'remote' ? '_blank' : '_self'}
+                  target={activeTariffDocument?.type === 'remote' ? '_blank' : '_self'}
                   rel="noopener noreferrer"
                   className="tariff-modal__btn tariff-modal__btn--primary"
                 >
-                  {tariffModal.type === 'remote'
+                  {activeTariffDocument?.type === 'remote'
                     ? 'Ouvrir dans un nouvel onglet'
                     : 'Télécharger le PDF'}
                 </a>

@@ -1764,7 +1764,34 @@ const downloadAdditionalTariffDocument = async (req, res, next) => {
     if (!filePath || !fs.existsSync(filePath)) {
       return res.status(404).json({ error: 'Fichier indisponible.' });
     }
-    return res.download(filePath, document.original_name || document.filename);
+
+    const normalizeFlag = (value) => {
+      if (value === undefined || value === null) {
+        return false;
+      }
+      const normalized = String(value).trim().toLowerCase();
+      return normalized === '1' || normalized === 'true' || normalized === 'yes';
+    };
+
+    const wantsInline = normalizeFlag(req.query.inline);
+    const wantsDownload = normalizeFlag(req.query.download);
+    const filename = document.original_name || document.filename;
+    const mimeType =
+      document.mime_type ||
+      (document.format === 'pdf'
+        ? 'application/pdf'
+        : 'application/octet-stream');
+
+    if (wantsInline && !wantsDownload) {
+      res.setHeader('Content-Type', mimeType);
+      res.setHeader(
+        'Content-Disposition',
+        `inline; filename="${encodeURIComponent(filename)}"`
+      );
+      return res.sendFile(filePath);
+    }
+
+    return res.download(filePath, filename);
   } catch (error) {
     return next(error);
   }

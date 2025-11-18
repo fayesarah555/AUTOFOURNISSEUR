@@ -8,7 +8,18 @@ const {
 const { importProviders } = require('../services/providerImportService');
 const { findTariffDocument } = require('../utils/tariffDocuments');
 
-const clone = (value) => (value ? JSON.parse(JSON.stringify(value)) : null);
+const clone = (value) => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof structuredClone === 'function') {
+    return structuredClone(value);
+  }
+
+  const replacer = (_, v) => (typeof v === 'bigint' ? v.toString() : v);
+  return JSON.parse(JSON.stringify(value, replacer));
+};
 
 const parseJsonArray = (value, fallback = []) => {
   if (!value) {
@@ -116,6 +127,23 @@ const hydrateProviders = async (supplierRows) => {
       )
     : [];
 
+  const tariffDocumentRows = supplierIds.length
+    ? await pool.query(
+        `SELECT id,
+                supplier_id,
+                filename,
+                original_name,
+                mime_type,
+                format,
+                size_bytes,
+                created_at
+         FROM supplier_tariff_documents
+         WHERE supplier_id IN ${inClause.clause}
+         ORDER BY created_at DESC, id DESC`,
+        inClause.params
+      )
+    : [];
+
   const serviceFeaturesBySupplier = new Map();
   const profileFeaturesBySupplier = new Map();
 
@@ -193,6 +221,17 @@ const hydrateProviders = async (supplierRows) => {
     }
   }
 
+  for (const doc of tariffDocumentRows) {
+    if (!supplierIdSet.has(doc.supplier_id)) {
+      continue;
+    }
+
+    if (!tariffDocsBySupplier.has(doc.supplier_id)) {
+      tariffDocsBySupplier.set(doc.supplier_id, []);
+    }
+    tariffDocsBySupplier.get(doc.supplier_id).push(doc);
+  }
+
   const providers = supplierRows.map((row) => {
     const id = row.external_ref || `prt-db-${row.id}`;
     const modes = parseJsonArray(row.modes_json, ['road']).map((value) => value.toLowerCase());
@@ -250,19 +289,16 @@ const hydrateProviders = async (supplierRows) => {
     };
 
     const attachedDocuments = (tariffDocsBySupplier.get(row.id) || []).map((doc) => ({
-      id: doc.id,
+      id: Number(doc.id) || doc.id,
       filename: doc.filename,
       originalName: doc.original_name || doc.filename,
       format: doc.format,
-      sizeBytes: doc.size_bytes || null,
+      sizeBytes: doc.size_bytes !== null && doc.size_bytes !== undefined ? Number(doc.size_bytes) : null,
       createdAt: doc.created_at,
       downloadUrl: `/api/providers/${id}/tariff-documents/${doc.id}`,
     }));
 
     provider.tariffDocuments = attachedDocuments;
-    if (attachedDocuments.length > 0) {
-      provider.hasTariffDocument = true;
-    }
 
     if (!provider.profile.department && provider.profile.deliveryDepartments.length > 0) {
       provider.profile.department = provider.profile.deliveryDepartments[0];
@@ -273,7 +309,9 @@ const hydrateProviders = async (supplierRows) => {
     }
 
     const documentInfo = findTariffDocument(id, row.tariff_document_url);
-    provider.hasTariffDocument = documentInfo.hasDocument;
+    const hasAdditionalDocuments = attachedDocuments.length > 0;
+    const hasPrimaryDocument = documentInfo.hasDocument;
+    provider.hasTariffDocument = hasPrimaryDocument || hasAdditionalDocuments;
     provider.tariffDocumentUrl = documentInfo.hasDocument ? documentInfo.publicUrl : null;
     provider.tariffDocumentType = documentInfo.type || null;
     provider.tariffDocumentFormat = documentInfo.format || null;
