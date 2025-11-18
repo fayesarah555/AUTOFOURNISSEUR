@@ -62,7 +62,7 @@ const EXCEL_TEMPLATE_COLUMNS = {
   contact: 'Contact',
   phone: 'Téléphone',
   email: 'Email',
-  unreachable: 'Ne répond pas (oui/non)',
+  // unreachable: 'Ne répond pas (oui/non)',
   deliveryDepartments: 'Départements livraison (codes séparés par des virgules)',
   pickupDepartments: 'Départements chargement (codes séparés par des virgules)',
   profileNotes: 'Notes internes',
@@ -1831,7 +1831,7 @@ const buildProviderDatasetTemplateBuffer = () => {
     'Ville',
     'Nom de Contact',
     'Téléphone',
-    'Ne Répond pas ',
+    // 'Ne Répond pas ',
   ].forEach((label) => push('', label));
 
   // Départements livraisons (exemple de quelques codes)
@@ -1869,7 +1869,7 @@ const buildProviderDatasetTemplateBuffer = () => {
   setBySecond('Ville', '69000 Lyon');
   setBySecond('Nom de Contact', 'Jean Dupont');
   setBySecond('Téléphone', '0601020304');
-  setBySecond('Ne Répond pas ', '');
+  // setBySecond('Ne Répond pas ', '');
 
   // Exemples de départements livraisons/chargement cochés
   setBySecond('01', 'x');

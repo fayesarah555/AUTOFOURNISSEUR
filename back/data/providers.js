@@ -266,8 +266,8 @@ const loadFromExcel = (excelPath) => {
         case 'Téléphone':
           provider.profile.phone = normalizePhone(cellValue);
           break;
-        case 'Ne Répond pas ':
-          provider.profile.unreachable = boolFromCell(cellValue);
+        // case 'Ne Répond pas ':
+        //   provider.profile.unreachable = boolFromCell(cellValue);
           break;
         default: {
           const featureGroup = featureDictionary[topLabel];

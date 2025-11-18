@@ -1144,7 +1144,7 @@ const AdminProviders = ({ onLogout }) => {
                       checked={formState.profile.unreachable}
                       onChange={(e) => handleProfileChange('unreachable', e.target.checked)}
                     />
-                    <span>Ne répond pas</span>
+                    {/* <span>Ne répond pas</span> */}
                   </label>
                 </div>
               </fieldset>
