@@ -22,6 +22,8 @@ const createEmptyFilters = () => ({
   supplementaryOptions: [],
   weightKg: '',
   distanceKm: '',
+  departureDepartment: '',
+  arrivalDepartment: '',
   requireWeightMatch: false,
   deliveryDepartments: [],
   pickupDepartments: [],
@@ -414,8 +416,6 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
   const [meta, setMeta] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [estimationDeparture, setEstimationDeparture] = useState('');
-  const [estimationArrival, setEstimationArrival] = useState('');
   const [palletFormatInput, setPalletFormatInput] = useState('');
   const [tariffModal, setTariffModal] = useState({
     open: false,
@@ -925,8 +925,6 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
     setAppliedFilters(empty);
     setCargoSelections([]);
     setPage(1);
-    setEstimationDeparture('');
-    setEstimationArrival('');
   }, []);
 
   const handleOpenTariff = useCallback((provider) => {
@@ -1301,12 +1299,12 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
         params.requireWeightMatch = 'true';
       }
 
-      if (estimationDeparture) {
-        params.departureDepartment = estimationDeparture;
+      if (appliedFilters.departureDepartment) {
+        params.departureDepartment = appliedFilters.departureDepartment;
       }
 
-      if (estimationArrival) {
-        params.arrivalDepartment = estimationArrival;
+      if (appliedFilters.arrivalDepartment) {
+        params.arrivalDepartment = appliedFilters.arrivalDepartment;
       }
 
       try {
@@ -1339,7 +1337,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
     return () => {
       isCancelled = true;
     };
-  }, [appliedFilters, page, pageSize, estimationDeparture, estimationArrival]);
+  }, [appliedFilters, page, pageSize]);
 
   return (
     <div className="dashboard-improved">
@@ -1400,11 +1398,8 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                     <SearchableSingleSelect
                       label="Départ (estimation)"
                       options={departmentOptionsAll}
-                      selectedValue={estimationDeparture}
-                      onChange={(value) => {
-                        setEstimationDeparture(value);
-                        setPage(1);
-                      }}
+                      selectedValue={formState.departureDepartment}
+                      onChange={(value) => updateFormState('departureDepartment', value || '')}
                       placeholder="Tous les départements"
                     />
                   </div>
@@ -1412,11 +1407,8 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                     <SearchableSingleSelect
                       label="Arrivée (estimation)"
                       options={departmentOptionsAll}
-                      selectedValue={estimationArrival}
-                      onChange={(value) => {
-                        setEstimationArrival(value);
-                        setPage(1);
-                      }}
+                      selectedValue={formState.arrivalDepartment}
+                      onChange={(value) => updateFormState('arrivalDepartment', value || '')}
                       placeholder="Tous les départements"
                     />
                   </div>
