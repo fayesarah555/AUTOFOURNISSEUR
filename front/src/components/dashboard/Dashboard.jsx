@@ -1445,6 +1445,17 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                     <span>Saisissez une distance ou sélectionnez départ/arrivée</span>
                   )}
                 </div>
+                <div className="filter-group filter-group--full">
+                  <label>
+                    Nom du transporteur
+                    <input
+                      type="text"
+                      placeholder="Rechercher un transporteur"
+                      value={formState.q}
+                      onChange={(e) => updateFormState('q', e.target.value)}
+                    />
+                  </label>
+                </div>
               </div>
               <div className="filters-subsection filters-subsection--cargo">
                 <h3>Description marchandise</h3>
