@@ -94,6 +94,8 @@ const AdminProviders = ({ onLogout }) => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [searchText, setSearchText] = useState('');
+  const [searchName, setSearchName] = useState('');
+  const [searchDepartment, setSearchDepartment] = useState('');
   const [formState, setFormState] = useState(() => createDefaultFormState());
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -265,6 +267,8 @@ const AdminProviders = ({ onLogout }) => {
   const fetchProviders = async () => {
     setLoading(true);
     setError(null);
+    const queryParts = [searchText, searchName, searchDepartment].map((s) => (s || '').trim()).filter(Boolean);
+    const query = queryParts.join(' ').trim();
     try {
       const response = await apiClient.get('/admin/providers', {
         params: {
@@ -272,7 +276,7 @@ const AdminProviders = ({ onLogout }) => {
           pageSize,
           sortBy: 'name',
           sortOrder: 'asc',
-          q: (searchText || '').trim(),
+          q: query,
         },
       });
       setProviders(response.data.data || []);
@@ -286,7 +290,7 @@ const AdminProviders = ({ onLogout }) => {
 
   useEffect(() => {
     fetchProviders();
-  }, [page, pageSize, searchText]);
+  }, [page, pageSize, searchText, searchName, searchDepartment]);
 
   const openCreateModal = () => {
     setFormState(createDefaultFormState());
@@ -851,18 +855,6 @@ const AdminProviders = ({ onLogout }) => {
 
       <section className="admin-list-section">
         <div className="admin-list-controls">
-          <label className="search-inline">
-            <span>Recherche</span>
-            <input
-              type="text"
-              placeholder="Nom, adresse, contact, ville, département…"
-              value={searchText}
-              onChange={(e) => {
-                setSearchText(e.target.value);
-                setPage(1);
-              }}
-            />
-          </label>
           <label>
             <span>Résultats / page</span>
             <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))}>
@@ -892,8 +884,50 @@ const AdminProviders = ({ onLogout }) => {
 
         {error && <div className="admin-error">{error}</div>}
 
+        <div className="list-header">
+          <h3>Liste des transporteurs</h3>
+          <div className="admin-table-filters">
+            <label className="search-inline">
+              <span>Recherche globale</span>
+              <input
+                type="text"
+                placeholder="Nom, adresse, contact, ville, département..."
+                value={searchText}
+                onChange={(e) => {
+                  setSearchText(e.target.value);
+                  setPage(1);
+                }}
+              />
+            </label>
+            <label className="search-inline">
+              <span>Nom du transporteur</span>
+              <input
+                type="text"
+                placeholder="Filtrer par nom"
+                value={searchName}
+                onChange={(e) => {
+                  setSearchName(e.target.value);
+                  setPage(1);
+                }}
+              />
+            </label>
+            <label className="search-inline">
+              <span>Département</span>
+              <input
+                type="text"
+                placeholder="Ex: 69, 75..."
+                value={searchDepartment}
+                onChange={(e) => {
+                  setSearchDepartment(e.target.value);
+                  setPage(1);
+                }}
+              />
+            </label>
+          </div>
+        </div>
+
         <div className="admin-table-wrapper">
-          {loading ? (
+{loading ? (
             <p>Chargement…</p>
           ) : (
             <table className="admin-table">

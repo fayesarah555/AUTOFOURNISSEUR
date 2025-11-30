@@ -416,6 +416,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
   const [meta, setMeta] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [quickSearch, setQuickSearch] = useState('');
   const [palletFormatInput, setPalletFormatInput] = useState('');
   const [tariffModal, setTariffModal] = useState({
     open: false,
@@ -926,6 +927,18 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
     setCargoSelections([]);
     setPage(1);
   }, []);
+
+  useEffect(() => {
+    // Garder la recherche rapide alignée avec les filtres appliqués (reset, apply, etc.)
+    setQuickSearch(appliedFilters.q || '');
+  }, [appliedFilters.q]);
+
+  const handleQuickSearchChange = (value) => {
+    setQuickSearch(value);
+    setFormState((prev) => ({ ...prev, q: value }));
+    setAppliedFilters((prev) => ({ ...prev, q: value }));
+    setPage(1);
+  };
 
   const handleOpenTariff = useCallback((provider) => {
     if (!provider) {
@@ -1445,17 +1458,6 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                     <span>Saisissez une distance ou sélectionnez départ/arrivée</span>
                   )}
                 </div>
-                <div className="filter-group filter-group--full">
-                  <label>
-                    Nom du transporteur
-                    <input
-                      type="text"
-                      placeholder="Rechercher un transporteur"
-                      value={formState.q}
-                      onChange={(e) => updateFormState('q', e.target.value)}
-                    />
-                  </label>
-                </div>
               </div>
               <div className="filters-subsection filters-subsection--cargo">
                 <h3>Description marchandise</h3>
@@ -1675,6 +1677,15 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
               </label>
             </div>
           </div>
+          <label className="default_cursor_land">
+            Nom du transporteur
+            <input
+              type="text"
+              placeholder="Rechercher un transporteur"
+              value={quickSearch}
+              onChange={(e) => handleQuickSearchChange(e.target.value)}
+            />
+          </label>
 
           <div className="results-table">
             {/* Tableau des résultats */}
