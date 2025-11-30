@@ -55,6 +55,8 @@ const SUPPLEMENTARY_OPTIONS = [
 const EXCEL_TEMPLATE_COLUMNS = {
   name: 'Nom du transporteur',
   description: 'Description',
+  remark: 'Remarque / Commentaire',
+  note: 'Note (1-5)',
   address: 'Adresse',
   postalCode: 'Code postal',
   city: 'Ville',
@@ -108,6 +110,8 @@ const normalizeExcelRowHeaders = (row = {}) => {
 const EXCEL_TEMPLATE_HEADER_ORDER = [
   EXCEL_TEMPLATE_COLUMNS.name,
   EXCEL_TEMPLATE_COLUMNS.description,
+  EXCEL_TEMPLATE_COLUMNS.remark,
+  EXCEL_TEMPLATE_COLUMNS.note,
   EXCEL_TEMPLATE_COLUMNS.address,
   EXCEL_TEMPLATE_COLUMNS.postalCode,
   EXCEL_TEMPLATE_COLUMNS.city,
@@ -137,6 +141,8 @@ const EXCEL_TEMPLATE_SAMPLE_ROW = {
   [EXCEL_TEMPLATE_COLUMNS.contact]: 'Jean Dupont',
   [EXCEL_TEMPLATE_COLUMNS.phone]: '0601020304',
   [EXCEL_TEMPLATE_COLUMNS.email]: 'contact@example.com',
+  [EXCEL_TEMPLATE_COLUMNS.remark]: "Ex: Livraisons l'apres-midi uniquement",
+  [EXCEL_TEMPLATE_COLUMNS.note]: '4.5',
   [EXCEL_TEMPLATE_COLUMNS.unreachable]: 'non',
   [EXCEL_TEMPLATE_COLUMNS.deliveryDepartments]: '01, 03, 38, 69',
   [EXCEL_TEMPLATE_COLUMNS.pickupDepartments]: '42, 43, 63',
@@ -404,9 +410,26 @@ const buildProviderPayloadFromExcelRow = (row) => {
     normalizedRow[EXCEL_TEMPLATE_COLUMNS.serviceCapabilities]
   ).map((value) => value.toLowerCase());
 
+  const noteRaw = getString(EXCEL_TEMPLATE_COLUMNS.note);
+  const parsedNote = (() => {
+    if (!noteRaw) {
+      return undefined;
+    }
+    const n = Number.parseFloat(noteRaw.replace(',', '.'));
+    if (!Number.isFinite(n)) {
+      return undefined;
+    }
+    return Math.max(1, Math.min(5, n));
+  })();
+
+  const remark = getString(EXCEL_TEMPLATE_COLUMNS.remark);
+
   return {
     name: getString(EXCEL_TEMPLATE_COLUMNS.name),
     description: getString(EXCEL_TEMPLATE_COLUMNS.description),
+    notes: remark,
+    rating: parsedNote,
+    customerSatisfaction: parsedNote,
     coverage: getString(EXCEL_TEMPLATE_COLUMNS.coverage) || 'domestic',
     contractFlexibility: getString(EXCEL_TEMPLATE_COLUMNS.contractFlexibility) || 'spot',
     modes: splitMultiValueInput(normalizedRow[EXCEL_TEMPLATE_COLUMNS.modes]).map((value) =>
@@ -1510,10 +1533,14 @@ const importSingleProviderWithTariff = async (req, res, next) => {
       if (normalized.length === 0) {
         return res.status(400).json({ error: 'Aucune ligne valide dans le fichier.' });
       }
-      const result = await importProviders(normalized, { sourceSheet: 'CUSTOM' });
+      const result = await importProviders(normalized, {
+        sourceSheet: 'CUSTOM',
+        continueOnError: true,
+      });
       return res.status(201).json({
         message: `${result.processed} fournisseur(s) importé(s).`,
         processed: result.processed,
+        errors: result.errors || [],
       });
     } catch (error) {
       return next(error);

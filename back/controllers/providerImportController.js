@@ -11,12 +11,16 @@ const importExcelProviders = async (req, res, next) => {
   const tmpPath = file.path;
 
   try {
-    const result = await importProvidersFromExcel(tmpPath, { sourceSheet: 'CUSTOM' });
+    const result = await importProvidersFromExcel(tmpPath, {
+      sourceSheet: 'CUSTOM',
+      continueOnError: true,
+    });
     // eslint-disable-next-line no-console
     console.info(`Admin import: ${result.processed} fournisseurs traités depuis ${file.originalname}`);
     return res.status(200).json({
       processed: result.processed,
       items: result.items || [],
+      errors: result.errors || [],
       message: `${result.processed} fournisseur(s) importé(s) avec succès`,
     });
   } catch (error) {

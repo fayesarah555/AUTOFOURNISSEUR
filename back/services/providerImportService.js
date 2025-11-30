@@ -335,7 +335,10 @@ const updateCoverage = async (conn, supplierId, provider) => {
   }
 };
 
-const importProviders = async (providers, { sourceSheet = 'CUSTOM' } = {}) => {
+const importProviders = async (
+  providers,
+  { sourceSheet = 'CUSTOM', continueOnError = false } = {}
+) => {
   if (!Array.isArray(providers) || providers.length === 0) {
     return { processed: 0 };
   }
@@ -346,6 +349,7 @@ const importProviders = async (providers, { sourceSheet = 'CUSTOM' } = {}) => {
 
     let processed = 0;
     const items = [];
+    const errors = [];
 
     for (const provider of providers) {
       await conn.beginTransaction();
@@ -365,12 +369,31 @@ const importProviders = async (providers, { sourceSheet = 'CUSTOM' } = {}) => {
         // eslint-disable-next-line no-console
         console.info('[providers][import] upserted', { supplierId, externalRef: provider.id, name: provider.name });
       } catch (error) {
-        await conn.rollback();
-        throw error;
+        try {
+          await conn.rollback();
+        } catch (_) {
+          // ignore rollback failure
+        }
+
+        const errorEntry = {
+          externalRef: provider?.id || null,
+          name: provider?.name || null,
+          message: error.message || 'Erreur inconnue pendant import fournisseur',
+        };
+
+        // eslint-disable-next-line no-console
+        console.error('[providers][import] failed', errorEntry);
+
+        if (!continueOnError) {
+          throw error;
+        }
+
+        errors.push(errorEntry);
+        continue;
       }
     }
 
-    return { processed, items };
+    return { processed, items, errors };
   } finally {
     conn.release();
   }

@@ -1,20 +1,34 @@
 # Boilerplate Template
 
-This directory contains a minimal full‑stack template extracted from the main project.
+This directory contains a minimal full-stack template extracted from the main project.
 It provides:
 
-- A lightweight Express backend with session‑based authentication (no LDAP/DB connectivity).
+- A lightweight Express backend with session-based authentication (no LDAP/DB connectivity).
 - A React frontend with a login screen and a protected dashboard shell.
 - Placeholder utilities and documentation you can extend for real data stores and business logic.
 
 ## Structure
 
-- `back/` – Express server, authentication routes, and example protected API.
-- `front/` – React application with login form, route guard, and dashboard layout shell.
+- `back/` - Express server, authentication routes, and example protected API.
+- `front/` - React application with login form, route guard, and dashboard layout shell.
 
 Both applications are intentionally stripped from database configuration, external
-connectors, and feature‑specific controllers. Replace the placeholder logic with
+connectors, and feature-specific controllers. Replace the placeholder logic with
 your own services when integrating into a real system.
+
+## Docker
+
+For a portable setup, use Docker Compose (MariaDB + API + frontend):
+
+1. Copy `.env.example` to `.env` at the repo root and adjust values if needed.
+2. Build and start everything: `docker compose up --build -d`
+3. Frontend: http://localhost:3000 (served by Nginx)
+4. API: http://localhost:8080 (`/health` for a quick check), DB exposed on `${DB_PORT:-3307}`
+
+Notes:
+- Compose auto-loads the schema/seed files from `back/config/schema.sql` and `back/config/seed_pallets.sql` into MariaDB on the first run.
+- Uploaded tariff documents are persisted in the `back_public` volume (`back/public` inside the container).
+- Override `FRONT_API_BASE_URL` (build arg) or `CLIENT_ORIGIN` (API env) to point the UI/API to other hosts when deploying elsewhere.
 
 ## Quick Start
 

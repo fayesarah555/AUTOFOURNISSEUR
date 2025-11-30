@@ -36,13 +36,20 @@ const main = async () => {
       }
 
       const sourceSheet = providers[0]?.source_sheet || 'TPS_National';
-      const result = await importProviders(providers, { sourceSheet });
-      console.log('Imported ' + result.processed + ' providers into MariaDB.');
+      const result = await importProviders(providers, { sourceSheet, continueOnError: true });
+      console.log(
+        'Imported ' + result.processed + ' providers into MariaDB. Errors: ' + (result.errors?.length || 0)
+      );
       return;
     }
 
-    const result = await importProvidersFromExcel(excelPath, { sourceSheet: 'CUSTOM' });
-    console.log('Imported ' + result.processed + ' providers from ' + excelPath + '.');
+    const result = await importProvidersFromExcel(excelPath, {
+      sourceSheet: 'CUSTOM',
+      continueOnError: true,
+    });
+    console.log(
+      'Imported ' + result.processed + ' providers from ' + excelPath + '. Errors: ' + (result.errors?.length || 0)
+    );
   } finally {
     await closePool();
   }

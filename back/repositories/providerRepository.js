@@ -67,6 +67,8 @@ const generateId = (name) => {
   return `prt-${slug}-${randomSuffix}`;
 };
 
+const DB_ID_PATTERN = /^prt-db-(\d+)$/i;
+
 const fetchSuppliers = async (externalRefs) => {
   if (Array.isArray(externalRefs) && externalRefs.length > 0) {
     const { clause, params } = buildInClause(externalRefs);
@@ -74,6 +76,14 @@ const fetchSuppliers = async (externalRefs) => {
   }
 
   if (typeof externalRefs === 'string' && externalRefs) {
+    const dbIdMatch = externalRefs.match(DB_ID_PATTERN);
+    if (dbIdMatch) {
+      return pool.query('SELECT * FROM suppliers WHERE id = ?', [Number(dbIdMatch[1])]);
+    }
+    const numericId = Number(externalRefs);
+    if (Number.isFinite(numericId)) {
+      return pool.query('SELECT * FROM suppliers WHERE id = ?', [numericId]);
+    }
     return pool.query('SELECT * FROM suppliers WHERE external_ref = ?', [externalRefs]);
   }
 
@@ -511,7 +521,14 @@ const deleteProvider = async (externalRefOrId) => {
   }
 
   const candidate = String(externalRefOrId).trim();
-  // Try delete by external_ref (primary key used across the app)
+  const dbIdMatch = candidate.match(DB_ID_PATTERN);
+  const numericId = Number.isFinite(Number(candidate))
+    ? Number(candidate)
+    : dbIdMatch
+    ? Number(dbIdMatch[1])
+    : null;
+
+  // Try delete by external_ref (primary path)
   let result = await pool.query('DELETE FROM suppliers WHERE external_ref = ?', [candidate]);
   if (result.affectedRows > 0) {
     // eslint-disable-next-line no-console
@@ -519,13 +536,12 @@ const deleteProvider = async (externalRefOrId) => {
     return true;
   }
 
-  // Fallback: if a numeric id was provided, allow deletion by numeric id
-  const numericId = Number(candidate);
-  if (Number.isFinite(numericId)) {
+  // Fallback: delete by numeric id (supports prt-db-<id> pseudo IDs)
+  if (numericId !== null) {
     result = await pool.query('DELETE FROM suppliers WHERE id = ?', [numericId]);
     if (result.affectedRows > 0) {
       // eslint-disable-next-line no-console
-      console.info('[providers][delete] deleted by numeric id', { id: numericId });
+      console.info('[providers][delete] deleted by numeric id', { id: numericId, input: candidate });
       return true;
     }
   }
