@@ -56,6 +56,13 @@ node scripts/importExcel.js ../samples/transporteur_demo_10.xlsx
 ```
 Le script utilise `continueOnError`, donc il traite toutes les lignes et affiche les erreurs éventuelles.
 
+### Import depuis les conteneurs (en utilisant le fichier déjà présent dans l'image back)
+Après `docker compose up`, lance :
+```bash
+docker compose exec back sh -c "node scripts/importExcel.js /app/Liste\\ Global\\ transporteurs.xlsx"
+```
+Cela charge le fichier `Liste Global transporteurs.xlsx` livré dans `back/` directement dans la base MariaDB du container.
+
 ## 7) Lancer local hors Docker (optionnel)
 ### Backend
 ```bash
