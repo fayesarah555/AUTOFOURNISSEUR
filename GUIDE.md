@@ -37,12 +37,13 @@ cp .env.example .env
 # Ajuste les secrets si besoin (ports, mots de passe DB, SECRET_KEY, etc.)
 ```
 
-## 5) Lancer l'environnement complet (MariaDB + API + Front)
+## 5) Lancer l'environnement complet (MariaDB + API + Front + Reverse proxy Nginx)
 ```bash
 docker compose up --build -d
 ```
-- Front : http://localhost:3000  
-- API : http://localhost:8080 (ping `/health`)  
+- Reverse proxy Nginx : http://localhost (proxy `/api` et `/admin` vers back)  
+- Front direct : http://localhost:3000 (Nginx front dans le conteneur `front`)  
+- API directe : http://localhost:8080 (ping `/health`)  
 - DB : port host `${DB_PORT:-3307}` vers 3306 container, init via `back/config/schema.sql` + `back/config/seed_pallets.sql`.
 
 ## 6) Importer les transporteurs (Excel) via script
