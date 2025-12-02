@@ -7,7 +7,7 @@ COPY package*.json ./
 RUN npm ci
 
 # Build the React application with a configurable API base URL
-ARG REACT_APP_API_BASE_URL=http://localhost:8080
+ARG REACT_APP_API_BASE_URL=/api
 ENV REACT_APP_API_BASE_URL=${REACT_APP_API_BASE_URL}
 
 COPY . .
