@@ -1,0 +1,89 @@
+version: "3.9"
+
+services:
+  db:
+    image: mariadb:11.4
+    restart: unless-stopped
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root}
+      MARIADB_DATABASE: ${DB_NAME:-autofournisseur}
+      MARIADB_USER: ${DB_USER:-appuser}
+      MARIADB_PASSWORD: ${DB_PASSWORD:-apppassword}
+      TZ: ${TZ:-Europe/Paris}
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./back/config/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./back/config/seed_pallets.sql:/docker-entrypoint-initdb.d/02-seed_pallets.sql:ro
+    ports:
+      - "${DB_PORT:-3307}:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  back:
+    build:
+      context: ./back
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: ${BACK_PORT:-8080}
+      CLIENT_ORIGIN: ${CLIENT_ORIGIN:-http://localhost,http://localhost:3000}
+      SESSION_NAME: ${SESSION_NAME:-session}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      SESSION_SAME_SITE: ${SESSION_SAME_SITE:-lax}
+      SESSION_MAX_AGE_MS: ${SESSION_MAX_AGE_MS:-14400000}
+      SECRET_KEY: ${SECRET_KEY:-change-me}
+      DEMO_USER_ID: ${DEMO_USER_ID:-admin}
+      DEMO_USER_PASSWORD: ${DEMO_USER_PASSWORD:-password}
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_USER: ${DB_USER:-appuser}
+      DB_PASSWORD: ${DB_PASSWORD:-apppassword}
+      DB_NAME: ${DB_NAME:-autofournisseur}
+    ports:
+      - "${BACK_PORT:-8080}:8080"
+    volumes:
+      - back_public:/app/public
+
+  front:
+    build:
+      context: ./front
+      dockerfile: Dockerfile
+      args:
+        REACT_APP_API_BASE_URL: ${FRONT_API_BASE_URL:-http://localhost/api}
+    env_file:
+      - .env
+    restart: unless-stopped
+    depends_on:
+      - back
+    ports:
+      - "${FRONT_PORT:-3000}:80"
+
+  nginx:
+    image: nginx:1.27-alpine
+    depends_on:
+      - front
+      - back
+    env_file:
+      - .env
+    ports:
+      - "80:80"
+    volumes:
+      - ./infra/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    restart: unless-stopped
+
+volumes:
+  db_data:
+  back_public:
