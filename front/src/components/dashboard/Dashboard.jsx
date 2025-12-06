@@ -1795,7 +1795,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                 onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
                 disabled={loading || !(meta?.hasPreviousPage)}
               >
-                Prcdent
+                Précédent
               </button>
               <span>
                 Page {meta?.page ?? page} / {meta?.totalPages ?? Math.max(Math.ceil((meta?.total ?? providers.length) / pageSize), 1)}
