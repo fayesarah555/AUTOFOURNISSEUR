@@ -869,7 +869,7 @@ const AdminProviders = ({ onLogout }) => {
       <section className="admin-list-section">
         <div className="admin-list-controls">
           <label>
-            <span>Résultats / page</span>
+              <span>Résultats / page</span>
             <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))}>
               {pageSizeOptions.map((size) => (
                 <option key={size} value={size}>
@@ -912,36 +912,12 @@ const AdminProviders = ({ onLogout }) => {
                 }}
               />
             </label>
-            <label className="search-inline">
-              <span>Nom du transporteur</span>
-              <input
-                type="text"
-                placeholder="Filtrer par nom"
-                value={searchName}
-                onChange={(e) => {
-                  setSearchName(e.target.value);
-                  setPage(1);
-                }}
-              />
-            </label>
-            <label className="search-inline">
-              <span>Département</span>
-              <input
-                type="text"
-                placeholder="Ex: 69, 75..."
-                value={searchDepartment}
-                onChange={(e) => {
-                  setSearchDepartment(e.target.value);
-                  setPage(1);
-                }}
-              />
-            </label>
           </div>
         </div>
 
         <div className="admin-table-wrapper">
-{loading ? (
-            <p>Chargement…</p>
+          {loading ? (
+            <p>Chargement...</p>
           ) : (
             <table className="admin-table">
               <thead>
@@ -950,148 +926,157 @@ const AdminProviders = ({ onLogout }) => {
                   <th>Adresse</th>
                   <th>Contact</th>
                   <th>Téléphone</th>
+                  <th>Département</th>
                   <th>Note</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                    {providers.map((provider) => {
-                      const galleryDocuments = buildTariffGalleryEntries(provider);
-                      const tariffFormatLabel = provider.hasTariffDocument
-                        ? getTariffFormatLabel(provider.tariffDocumentFormat)
-                        : null;
-                      const manageButtonLabel = uploadingProviderId === provider.id
-                        ? 'Import en cours...'
-                        : provider.hasTariffDocument
-                        ? `Remplacer ${tariffFormatLabel}`
-                        : 'Ajouter PDF / XLS';
-                      return (
-                        <tr key={provider.id}>
-                          <td>{provider.name}</td>
-                          <td>{provider.profile?.address || '--'}</td>
-                          <td>{provider.profile?.contact || '--'}</td>
-                          <td>{provider.profile?.phone || '--'}</td>
-                          <td>{provider.rating != null ? provider.rating : '--'}</td>
-                          <td className="table-actions">
-                            <button type="button" onClick={() => openEditModal(provider)}>
-                              Modifier
-                            </button>
-                            <button
-                              type="button"
-                              className="danger"
-                              onClick={() => handleDelete(provider.id)}
-                            >
-                              Supprimer
-                            </button>
-                            <div className="tariff-upload-group">
-                              <div className="tariff-section">
-                                <div className="tariff-section-header">
-                                  <p className="tariff-section-title">Documents tarifaires</p>
-                                  <div className="tariff-section-actions">
-                                    <button
-                                      type="button"
-                                      onClick={() => handleTariffUploadClick(provider.id)}
-                                      disabled={uploadingProviderId === provider.id}
-                                    >
-                                      {manageButtonLabel}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="small-btn"
-                                      onClick={() => handleAdditionalTariffUploadClick(provider.id)}
-                                    >
-                                      Ajouter un doc
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => openTariffImportFor(provider.id)}
-                                      title="Importer une grille via formulaire"
-                                      className="link-button"
-                                    >
-                                      Importer via formulaire
-                                    </button>
-                                  </div>
-                                </div>
-                                <input
-                                  type="file"
-                                  accept={TARIFF_FILE_ACCEPT}
-                                  ref={registerTariffInput(provider.id)}
-                                  style={{ display: 'none' }}
-                                  onChange={handleTariffFileChange(provider)}
-                                />
-                                <input
-                                  type="file"
-                                  accept={TARIFF_FILE_ACCEPT}
-                                  ref={registerAdditionalTariffInput(provider.id)}
-                                  style={{ display: 'none' }}
-                                  onChange={handleAdditionalTariffFileChange(provider)}
-                                />
-                                {provider.tariffDocumentFilename && (
-                                  <small
-                                    className="tariff-upload-hint"
-                                    title={provider.tariffDocumentFilename}
-                                  >
-                                    Document principal : {provider.tariffDocumentFilename}
-                                  </small>
-                                )}
-                                {galleryDocuments.length > 0 ? (
-                                  <div className="tariff-gallery">
-                                    {galleryDocuments.map((doc) => (
-                                      <div className="tariff-gallery-item" key={doc.id}>
-                                        {doc.url ? (
-                                          <iframe
-                                            src={buildInlinePreviewUrl(doc.url)}
-                                            title={`Aperçu ${doc.title}`}
-                                            loading="lazy"
-                                          />
-                                        ) : (
-                                          <div className="tariff-gallery-placeholder">
-                                            Aperçu indisponible
-                                          </div>
-                                        )}
-                                        <div className="tariff-gallery-footer">
-                                          <span className="tariff-gallery-title">{doc.title}</span>
-                                          <div className="tariff-gallery-actions">
-                                            {doc.url && (
-                                              <a
-                                                href={doc.url}
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                className="link-button"
-                                              >
-                                                Ouvrir
-                                              </a>
-                                            )}
-                                            {doc.isAdditional && (
-                                              <button
-                                                type="button"
-                                                className="link-button danger"
-                                                onClick={() =>
-                                                  handleDeleteAdditionalTariffDocument(
-                                                    provider.id,
-                                                    doc.documentId
-                                                  )
-                                                }
-                                              >
-                                                Supprimer
-                                              </button>
-                                            )}
-                                          </div>
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                ) : (
-                                  <small className="tariff-upload-hint">
-                                    Aucun document tarifaire. Ajoutez un PDF pour ce transporteur.
-                                  </small>
-                                )}
+                {providers.map((provider) => {
+                  const galleryDocuments = buildTariffGalleryEntries(provider);
+                  const tariffFormatLabel = provider.hasTariffDocument
+                    ? getTariffFormatLabel(provider.tariffDocumentFormat)
+                    : null;
+                  const manageButtonLabel = uploadingProviderId === provider.id
+                    ? 'Import en cours...'
+                    : provider.hasTariffDocument
+                    ? `Remplacer ${tariffFormatLabel}`
+                    : 'Ajouter PDF / XLS';
+                  return (
+                    <tr key={provider.id}>
+                      <td>{provider.name}</td>
+                      <td>{provider.profile?.address || '--'}</td>
+                      <td>{provider.profile?.contact || '--'}</td>
+                      <td>{provider.profile?.phone || '--'}</td>
+                      <td>{provider.profile?.department || '--'}</td>
+                      <td>{provider.rating != null ? provider.rating : '--'}</td>
+                      <td className="table-actions">
+                        <div className="action-row">
+                          <button type="button" onClick={() => openEditModal(provider)}>
+                            Modifier
+                          </button>
+                          <button
+                            type="button"
+                            className="danger"
+                            onClick={() => handleDelete(provider.id)}
+                          >
+                            Supprimer
+                          </button>
+                        </div>
+                        <div className="tariff-upload-group">
+                          <div className="tariff-section">
+                            <div className="tariff-section-header">
+                              <p className="tariff-section-title">Grille principale</p>
+                              <div className="tariff-section-actions">
+                                <button
+                                  type="button"
+                                  onClick={() => handleTariffUploadClick(provider.id)}
+                                  disabled={uploadingProviderId === provider.id}
+                                >
+                                  {manageButtonLabel}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => openTariffImportFor(provider.id)}
+                                  title="Importer une grille via formulaire (PDF/Excel)"
+                                  className="link-button"
+                                >
+                                  Importer via formulaire
+                                </button>
                               </div>
                             </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                            <div className="tariff-section-header secondary">
+                              <p className="tariff-section-title">Pièces jointes</p>
+                              <div className="tariff-section-actions">
+                                <button
+                                  type="button"
+                                  className="small-btn"
+                                  onClick={() => handleAdditionalTariffUploadClick(provider.id)}
+                                >
+                                  Ajouter une pièce (PDF/XLS)
+                                </button>
+                              </div>
+                            </div>
+                            <input
+                              type="file"
+                              accept={TARIFF_FILE_ACCEPT}
+                              ref={registerTariffInput(provider.id)}
+                              style={{ display: 'none' }}
+                              onChange={handleTariffFileChange(provider)}
+                            />
+                            <input
+                              type="file"
+                              accept={TARIFF_FILE_ACCEPT}
+                              ref={registerAdditionalTariffInput(provider.id)}
+                              style={{ display: 'none' }}
+                              onChange={handleAdditionalTariffFileChange(provider)}
+                            />
+                            {provider.tariffDocumentFilename && (
+                              <small
+                                className="tariff-upload-hint"
+                                title={provider.tariffDocumentFilename}
+                              >
+                                Document principal : {provider.tariffDocumentFilename}
+                              </small>
+                            )}
+                            {galleryDocuments.length > 0 ? (
+                              <div className="tariff-gallery">
+                                {galleryDocuments.map((doc) => (
+                                  <div className="tariff-gallery-item" key={doc.id}>
+                                    {doc.url ? (
+                                      <iframe
+                                        src={buildInlinePreviewUrl(doc.url)}
+                                        title={`Aper?u ${doc.title}`}
+                                        loading="lazy"
+                                      />
+                                    ) : (
+                                      <div className="tariff-gallery-placeholder">
+                                        Aper?u indisponible
+                                      </div>
+                                    )}
+                                    <div className="tariff-gallery-footer">
+                                      <span className="tariff-gallery-title">{doc.title}</span>
+                                      <div className="tariff-gallery-actions">
+                                        {doc.url && (
+                                          <a
+                                            href={doc.url}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="link-button"
+                                          >
+                                            Ouvrir
+                                          </a>
+                                        )}
+                                        {doc.isAdditional && (
+                                          <button
+                                            type="button"
+                                            className="small-btn danger"
+                                            onClick={() =>
+                                              handleDeleteAdditionalTariffDocument(
+                                                provider.id,
+                                                doc.documentId
+                                              )
+                                            }
+                                          >
+                                            Supprimer
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="tariff-gallery-empty">
+                                <p>Aucun document tarifaire.</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}

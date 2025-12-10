@@ -243,7 +243,7 @@ const SearchableMultiSelect = ({ label, options, selectedValues, onChange, place
         <span className="select-label">{label}</span>
         <span className="select-value">
           {selectedValues.length > 0
-            ? `${selectedValues.length} sélectionné(s)`
+            ? `${selectedValues.length} sélectionné${selectedValues.length > 1 ? 's' : ''}`
             : placeholder || (isDisabled ? 'Indisponible' : 'Tous')}
         </span>
         <span className={`select-arrow ${isOpen ? 'open' : ''}`}>▼</span>
