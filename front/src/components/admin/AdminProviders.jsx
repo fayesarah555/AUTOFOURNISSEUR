@@ -501,7 +501,7 @@ const AdminProviders = ({ onLogout }) => {
       const details = Array.isArray(data.items) && data.items.length
         ? `\nIDs: ${data.items.map((it) => it.externalRef).join(', ')}`
         : '';
-      setImportStatus((data.message || (data.processed ? data.processed + ' fournisseurs importés.' : 'Import terminé.')) + details);
+      setImportStatus((data.message || (data.processed ? `${data.processed} fournisseurs importés.` : 'Import terminé.')) + details);
       setSelectedFile(null);
       fetchProviders();
     } catch (err) {
@@ -751,30 +751,17 @@ const AdminProviders = ({ onLogout }) => {
       <header className="admin-header">
         <div>
           <h1>Espace Admin - Fournisseurs</h1>
-          <p>Gestion des transporteurs et import Excel.</p>
+          <p>Gestion des transporteurs : création, imports et grilles tarifaires.</p>
         </div>
-          <div className="admin-header-actions">
-            {onLogout && (
-              <button type="button" className="btn" onClick={onLogout}>
-                Se déconnecter
-              </button>
-            )}
-            <button type="button" className="btn" onClick={openCreateModal}>
-              Nouveau fournisseur
+        <div className="admin-header-actions">
+          {onLogout && (
+            <button type="button" className="btn" onClick={onLogout}>
+              Se déconnecter
             </button>
-            <form className="import-form" onSubmit={handleImportSubmit}>
-            <input
-              type="file"
-              accept=".xlsx,.xls"
-              onChange={(e) => setSelectedFile(e.target.files ? e.target.files[0] : null)}
-            />
-            <button type="submit" className="btn" disabled={importLoading}>
-              {importLoading ? 'Import en cours…' : 'Importer Excel'}
-            </button>
-          </form>
-          <a className="template-link" href={datasetTemplateUrl} target="_blank" rel="noreferrer">
-            Télécharger le modèle dataset
-          </a>
+          )}
+          <button type="button" className="btn" onClick={openCreateModal}>
+            Nouveau fournisseur
+          </button>
         </div>
       </header>
 
@@ -783,6 +770,32 @@ const AdminProviders = ({ onLogout }) => {
       {tariffUploadStatus && <div className="import-status">{tariffUploadStatus}</div>}
 
       <section className="creation-modes">
+        <div className="creation-card">
+          <h3>Importer un dataset complet</h3>
+          <p>
+            Chargez un fichier Excel multi-lignes pour créer ou mettre à jour plusieurs transporteurs en une fois.
+          </p>
+          <div className="creation-card-actions">
+            <a className="template-link" href={datasetTemplateUrl} target="_blank" rel="noreferrer">
+              Télécharger le modèle dataset
+            </a>
+          </div>
+          <form className="excel-import-form" onSubmit={handleImportSubmit}>
+            <label>
+              <span>Fichier dataset (Excel) *</span>
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={(e) => setSelectedFile(e.target.files ? e.target.files[0] : null)}
+                required
+              />
+              {selectedFile && <small className="file-name">{selectedFile.name}</small>}
+            </label>
+            <button type="submit" className="btn" disabled={importLoading}>
+              {importLoading ? 'Import en cours…' : 'Importer le dataset'}
+            </button>
+          </form>
+        </div>
         <div className="creation-card">
           <h3>Création via formulaire</h3>
           <p>
@@ -800,7 +813,7 @@ const AdminProviders = ({ onLogout }) => {
           <p>
             Téléchargez le modèle et complétez une seule ligne avec les informations du transporteur.
             Une fois le fournisseur créé et visible dans la liste, importez sa grille (PDF ou Excel)
-            depuis la colonne Actions de la ligne correspondante.
+            depuis la colonne “Actions” de la ligne correspondante.
           </p>
           <a
             className="template-link"
@@ -1261,7 +1274,7 @@ const AdminProviders = ({ onLogout }) => {
               </label>
               <div className="form-actions">
                 <button type="submit" className="btn primary" disabled={tariffImportState.loading}>
-                  {tariffImportState.loading ? 'Import en cours…' : 'Importer'}
+              {tariffImportState.loading ? 'Import en cours…' : 'Importer'}
                 </button>
                 <button type="button" className="btn" onClick={closeTariffImportModal}>
                   Annuler
