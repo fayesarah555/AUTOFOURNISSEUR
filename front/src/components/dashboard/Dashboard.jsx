@@ -1213,7 +1213,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
               try {
                 document.body.removeChild(iframe);
               } catch (cleanupError) {
-                console.debug('Impossible de retirer le cadre dimpression', cleanupError);
+                console.debug("Impossible de retirer le cadre d'impression", cleanupError);
               }
             }, 500);
           }
@@ -1227,7 +1227,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
       setTimeout(finalizePrint, 200);
     } catch (error) {
       console.error("Erreur lors de l'export de la grille au format PDF", error);
-      window.alert('Impossible de generer le PDF pour ce transporteur.');
+      window.alert('Impossible de générer le PDF pour ce transporteur.');
     }
   },
   [
@@ -1586,7 +1586,7 @@ const Dashboard = ({ user, onLogout, onLoginRequest, isAdmin }) => {
                     <div className="cargo-basket-header">
                       <div>
                         <strong>{cargoSelections.length}</strong> format
-                        {cargoSelections.length > 1 ? 's' : ''} enregistres
+                        {cargoSelections.length > 1 ? 's' : ''} enregistrés
                       </div>
                       <div className="cargo-basket-summary">
                         {cargoTotals.palletCount > 0 && (

@@ -597,7 +597,7 @@ const AdminProviders = ({ onLogout }) => {
     try {
       await apiClient.get('/admin/providers/' + encodeURIComponent(providerId));
     } catch (err) {
-      alert('Transporteur introuvable. Rafraǩchissez la liste ou rǸimportez-le.');
+      alert('Transporteur introuvable. Rafraîchissez la liste ou réimportez-le.');
       return;
     }
     const input = additionalTariffInputs.current[providerId];
@@ -640,7 +640,7 @@ const AdminProviders = ({ onLogout }) => {
       );
       fetchProviders();
     } catch (err) {
-      alert("�%chec de l'ajout de cette grille tarifaire.");
+      alert("Échec de l'ajout de cette grille tarifaire.");
     } finally {
       resetInput();
     }
@@ -756,7 +756,7 @@ const AdminProviders = ({ onLogout }) => {
           <div className="admin-header-actions">
             {onLogout && (
               <button type="button" className="btn" onClick={onLogout}>
-                Se deconnecter
+                Se déconnecter
               </button>
             )}
             <button type="button" className="btn" onClick={openCreateModal}>
