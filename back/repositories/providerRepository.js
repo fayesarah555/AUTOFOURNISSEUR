@@ -663,10 +663,10 @@ const updateProviderTariffDocumentPath = async (externalRef, filename) => {
     return null;
   }
 
-  // await pool.query(
-  //   'UPDATE suppliers SET tariff_document_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-  //   [filename || null, rows[0].id]
-  // );
+  await pool.query(
+    'UPDATE suppliers SET tariff_document_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    [filename || null, rows[0].id]
+  );
 
   return findProviderById(externalRef);
 };

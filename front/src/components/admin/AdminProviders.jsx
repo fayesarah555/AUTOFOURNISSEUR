@@ -660,6 +660,18 @@ const AdminProviders = ({ onLogout }) => {
     }
   };
 
+  const handleDeletePrimaryTariffDocument = async (providerId) => {
+    if (!window.confirm('Supprimer la grille principale de ce fournisseur ?')) {
+      return;
+    }
+    try {
+      await apiClient.delete(`/admin/providers/${encodeURIComponent(providerId)}/tariff-document`);
+      fetchProviders();
+    } catch (err) {
+      alert('Impossible de supprimer la grille principale.');
+    }
+  };
+
   const handleExcelCreationFileChange = (field) => (event) => {
     const file = event.target.files && event.target.files[0] ? event.target.files[0] : null;
 
@@ -1047,7 +1059,7 @@ const AdminProviders = ({ onLogout }) => {
                                             Ouvrir
                                           </a>
                                         )}
-                                        {doc.isAdditional && (
+                                        {doc.isAdditional ? (
                                           <button
                                             type="button"
                                             className="small-btn danger"
@@ -1057,6 +1069,14 @@ const AdminProviders = ({ onLogout }) => {
                                                 doc.documentId
                                               )
                                             }
+                                          >
+                                            Supprimer
+                                          </button>
+                                        ) : (
+                                          <button
+                                            type="button"
+                                            className="small-btn danger"
+                                            onClick={() => handleDeletePrimaryTariffDocument(provider.id)}
                                           >
                                             Supprimer
                                           </button>

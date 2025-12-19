@@ -48,7 +48,7 @@ const IDF_DEPARTMENT_CODES = new Set(['75', '77', '78', '91', '92', '93', '94', 
 const SUPPLEMENTARY_OPTIONS = [
   { value: 'hayon', label: 'Hayon' },
   { value: 'prise-rdv', label: 'Prise de RDV' },
-  { value: 'matiere-adr', label: 'Matiere ADR' },
+  { value: 'matiere-adr', label: 'Matière ADR' },
   { value: 'chgt-au-pont', label: 'Chgt au Pont' },
 ];
 
@@ -141,7 +141,7 @@ const EXCEL_TEMPLATE_SAMPLE_ROW = {
   [EXCEL_TEMPLATE_COLUMNS.contact]: 'Jean Dupont',
   [EXCEL_TEMPLATE_COLUMNS.phone]: '0601020304',
   [EXCEL_TEMPLATE_COLUMNS.email]: 'contact@example.com',
-  [EXCEL_TEMPLATE_COLUMNS.remark]: "Ex: Livraisons l'apres-midi uniquement",
+  [EXCEL_TEMPLATE_COLUMNS.remark]: "Ex: Livraisons l'après-midi uniquement",
   [EXCEL_TEMPLATE_COLUMNS.note]: '4.5',
   [EXCEL_TEMPLATE_COLUMNS.unreachable]: 'non',
   [EXCEL_TEMPLATE_COLUMNS.deliveryDepartments]: '01, 03, 38, 69',
@@ -464,7 +464,7 @@ const extractSingleProviderFromExcel = (filePath) => {
     return null;
   }
 
-  // 1) Tentative avec le modéle "simple" (une ligne, en-têtes EXCEL_TEMPLATE_COLUMNS)
+  // 1) Tentative avec le modèle "simple" (une ligne, en-têtes EXCEL_TEMPLATE_COLUMNS)
   {
     const sheet = workbook.Sheets[firstSheetName];
     const rows = xlsx
@@ -483,11 +483,11 @@ const extractSingleProviderFromExcel = (filePath) => {
       return buildProviderPayloadFromExcelRow(validRows[0]);
     }
     if (validRows.length > 1) {
-      throw new Error('Le fichier modéle (simple) doit contenir un seul transporteur par import.');
+      throw new Error('Le fichier modèle (simple) doit contenir un seul transporteur par import.');
     }
   }
 
-  // 2) Fallback: essayer le modéle "dataset" (type Liste Global transporteurs.xlsx)
+  // 2) Fallback: essayer le modèle "dataset" (type Liste Global transporteurs.xlsx)
   try {
     // Utilise le parseur dataset existant pour construire des objets fournisseurs
     // et ne garde que le premier si présent.
@@ -512,8 +512,8 @@ const extractSingleProviderFromExcel = (filePath) => {
 };
 
 // Retourne une liste de fournisseurs à  partir d'un fichier Excel.
-// Accepte le modéle "simple" (en-têtes EXCEL_TEMPLATE_COLUMNS) avec 1..N lignes,
-// ou le modéle "dataset" (type Liste Global transporteurs.xlsx).
+// Accepte le modèle "simple" (en-têtes EXCEL_TEMPLATE_COLUMNS) avec 1..N lignes,
+// ou le modèle "dataset" (type Liste Global transporteurs.xlsx).
 const extractFlexibleProvidersFromExcel = (filePath) => {
   const workbook = xlsx.readFile(filePath);
   const [firstSheetName] = workbook.SheetNames;
@@ -523,7 +523,7 @@ const extractFlexibleProvidersFromExcel = (filePath) => {
 
   const sheet = workbook.Sheets[firstSheetName];
 
-  // 1) Essayer le modéle simple (colonnes EXCEL_TEMPLATE_COLUMNS)
+  // 1) Essayer le modèle simple (colonnes EXCEL_TEMPLATE_COLUMNS)
   try {
     const rows = xlsx
       .utils
@@ -1505,11 +1505,11 @@ const importSingleProviderWithTariff = async (req, res, next) => {
   if (!providerPayloads || providerPayloads.length === 0) {
     await cleanupUploadedFile(tariffFile);
     return res.status(400).json({
-      error: 'Aucune donnée transporteur trouvée dans le modéle. Remplissez au moins une ligne.',
+      error: 'Aucune donnée transporteur trouvée dans le modèle. Remplissez au moins une ligne.',
     });
   }
   // Si plusieurs fournisseurs dans le fichier et un document tarifaire est présent,
-  // refuser pour éviter l'ambiguté.
+  // refuser pour éviter l'ambiguïté.
   if (providerPayloads.length > 1 && tariffFile) {
     await cleanupUploadedFile(tariffFile);
     return res.status(400).json({
@@ -1593,7 +1593,7 @@ const importSingleProviderWithTariff = async (req, res, next) => {
     await cleanupUploadedFile(tariffFile);
 
     return res.status(201).json({
-      message: 'Fournisseur importé depuis le modéle Excel.',
+      message: 'Fournisseur importé depuis le modèle Excel.',
       data: enrichProvider(finalProvider),
     });
   } catch (error) {
@@ -1667,12 +1667,53 @@ const uploadProviderTariffDocument = async (req, res, next) => {
 
     console.info('[providers][uploadTariff] imported document', { providerId: id, filename: tempFile?.originalname || null });
     return res.json({
-      message: 'Document tarifaire importé !.',
+      message: 'Document tarifaire importé !',
       data: enrichProvider(updatedProvider),
     });
   } catch (error) {
     console.error('[providers][uploadTariff] error', { message: error.message });
     await cleanupUploadedFile(tempFile);
+    return next(error);
+  }
+};
+
+const deleteProviderTariffDocument = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Identifiant fournisseur requis.' });
+    }
+
+    const meta = await getTariffDocumentDefinition(id);
+    if (!meta) {
+      return res.status(404).json({ error: 'Transporteur introuvable.' });
+    }
+
+    const documentInfo = findTariffDocument(meta.externalRef, meta.explicitPath);
+    if (!documentInfo.hasDocument) {
+      return res.status(404).json({ error: 'Aucune grille tarifaire disponible pour ce transporteur.' });
+    }
+
+    if (documentInfo.type === 'local' && documentInfo.filename) {
+      try {
+        await deleteTariffDocumentFile(documentInfo.filename);
+      } catch (error) {
+        console.warn('[providers][deleteTariff] failed to delete local file', {
+          providerId: id,
+          filename: documentInfo.filename,
+          message: error.message,
+        });
+      }
+    }
+
+    await updateProviderTariffDocumentPath(meta.externalRef, null);
+    const provider = await findProviderById(id);
+
+    return res.json({
+      message: 'Grille tarifaire supprimée.',
+      data: enrichProvider(provider),
+    });
+  } catch (error) {
     return next(error);
   }
 };
@@ -1683,7 +1724,7 @@ const addAdditionalTariffDocument = async (req, res, next) => {
 
   try {
     if (!tempFile) {
-      return res.status(400).json({ error: 'Aucun fichier .' });
+      return res.status(400).json({ error: 'Aucun fichier.' });
     }
 
     const supplierRow = await findSupplierRowByExternalRef(id);
@@ -1742,7 +1783,7 @@ const addAdditionalTariffDocument = async (req, res, next) => {
 
     const updatedProvider = await findProviderById(id);
     return res.status(201).json({
-      message: 'Grille tarifaire ajouté.',
+      message: 'Grille tarifaire ajoutée.',
       data: enrichProvider(updatedProvider),
     });
   } catch (error) {
@@ -1768,7 +1809,7 @@ const deleteAdditionalTariffDocument = async (req, res, next) => {
 
     const updatedProvider = await findProviderById(id);
     return res.json({
-      message: 'Grille tarifaire supprimï¿½e.',
+      message: 'Grille tarifaire supprimée.',
       data: enrichProvider(updatedProvider),
     });
   } catch (error) {
@@ -1927,7 +1968,7 @@ const downloadProviderDatasetTemplate = (_req, res) => {
   return res.send(buffer);
 };
 
-// Génére un modéle Excel simple pour une grille tarifaire à remplir
+// Génère un modèle Excel simple pour une grille tarifaire à remplir
 const buildTariffGridTemplateBuffer = () => {
   const workbook = xlsx.utils.book_new();
   const header = [
@@ -2296,6 +2337,7 @@ module.exports = {
   deleteProvider: deleteProviderEntry,
   importSingleProviderWithTariff,
   uploadProviderTariffDocument,
+  deleteProviderTariffDocument,
   addAdditionalTariffDocument,
   deleteAdditionalTariffDocument,
   downloadAdditionalTariffDocument,
@@ -2307,7 +2349,7 @@ module.exports = {
   getProviderBaseTariffGrid,
 };
 
-// Importe une grille tarifaire (catalogue + lignes) pour un fournisseur existant à partir d'un modéle Excel
+// Importe une grille tarifaire (catalogue + lignes) pour un fournisseur existant à partir d'un modèle Excel
 async function importTariffCatalogFromExcel(req, res, next) {
   const tempFile = req.file;
   try {
@@ -2316,7 +2358,7 @@ async function importTariffCatalogFromExcel(req, res, next) {
       return res.status(400).json({ error: 'Identifiant fournisseur requis.' });
     }
     if (!tempFile?.path) {
-      return res.status(400).json({ error: 'Aucun fichier .' });
+      return res.status(400).json({ error: 'Aucun fichier.' });
     }
 
     const workbook = xlsx.readFile(tempFile.path);
@@ -2432,7 +2474,3 @@ async function importTariffCatalogFromExcel(req, res, next) {
 }
 
 /* duplicate removed */
-
-
-
-

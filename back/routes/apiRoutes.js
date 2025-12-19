@@ -16,6 +16,7 @@ const {
   getProviderBaseTariffGrid,
   importSingleProviderWithTariff,
   uploadProviderTariffDocument,
+  deleteProviderTariffDocument,
   downloadProviderImportTemplate,
 } = require('../controllers/providerController');
 const { importExcelProviders } = require('../controllers/providerImportController');
@@ -39,8 +40,12 @@ const providerExcelUpload = upload.fields([
 
 router.get('/providers', listProviders);
 router.get('/providers/batch', getProvidersByIds);
-router.get('/providers/:id/tariff-document', getProviderTariffDocument);
-router.get('/providers/:id/tariff-documents/:documentId', downloadAdditionalTariffDocument);
+router.get('/providers/:id/tariff-document', requireAuth, getProviderTariffDocument);
+router.get(
+  '/providers/:id/tariff-documents/:documentId',
+  requireAuth,
+  downloadAdditionalTariffDocument
+);
 router.get('/providers/:id/base-tariff-grid', getProviderBaseTariffGrid);
 router.get('/providers/:id', getProviderById);
 
@@ -61,6 +66,11 @@ router.post(
   requireAdmin,
   upload.single('file'),
   uploadProviderTariffDocument
+);
+router.delete(
+  '/providers/:id/tariff-document',
+  requireAdmin,
+  deleteProviderTariffDocument
 );
 router.get(
   '/providers/import/template',
